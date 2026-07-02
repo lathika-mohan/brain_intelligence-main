@@ -42,7 +42,7 @@ class SensorReading(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sensor_id: str = Field(..., description="Unique sensor identifier, matches Neo4j :Sensor.id.")
+    sensor_id: str = Field(..., description="Unique sensor identifier, matches Phase 1 ontology :Sensor.id.")
     metric: str = Field(..., description="Metric name, e.g. 'vibration_x', 'bearing_temp'.")
     value: float
     unit: SensorUnit = SensorUnit.UNKNOWN
@@ -61,9 +61,9 @@ class TelemetryReading(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: str = Field(default="1.0.0")
-    asset_id: str = Field(..., description="Matches Neo4j :Asset.id.")
+    asset_id: str = Field(..., description="Matches Phase 1 ontology :Asset.id.")
     component_id: Optional[str] = Field(
-        default=None, description="Matches Neo4j :Component.id, if reading is component-scoped."
+        default=None, description="Matches Phase 1 ontology :Component.id, if reading is component-scoped."
     )
     timestamp: datetime = Field(default_factory=utc_now)
     readings: List[SensorReading] = Field(..., min_length=1)

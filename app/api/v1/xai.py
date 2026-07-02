@@ -13,7 +13,6 @@ from fastapi import APIRouter
 from app.models.common import APIResponse
 from app.models.xai import (
     ConfidenceMatrixEntry,
-    ExplanationMethod,
     ExplanationRequest,
     ExplanationResponse,
     FeatureImpact,

@@ -12,7 +12,6 @@ import time
 
 from fastapi import APIRouter
 
-from app.core.config import get_settings
 from app.models.common import APIResponse
 from app.models.graphrag import (
     Citation,
@@ -34,7 +33,6 @@ def query_graphrag(payload: GraphRagQueryRequest) -> APIResponse[GraphRagQueryRe
     later phase; the response SHAPE must not change without renegotiating
     with Member 4.
     """
-    settings = get_settings()
     started = time.perf_counter()
 
     stub_chunk = VectorContextChunk(
@@ -52,18 +50,41 @@ def query_graphrag(payload: GraphRagQueryRequest) -> APIResponse[GraphRagQueryRe
         nodes=[
             GraphNode(id="asset-stub-1", label="Asset", display_name="Pump-101", properties={}),
             GraphNode(
+                id="component-stub-1",
+                label="Component",
+                display_name="Drive-End Bearing",
+                properties={"component_type": "BEARING"},
+            ),
+            GraphNode(
+                id="sensor-stub-1",
+                label="Sensor",
+                display_name="Bearing Temperature Sensor",
+                properties={"metric": "bearing_temp", "unit": "C"},
+            ),
+            GraphNode(
                 id="failuremode-stub-1",
                 label="FailureMode",
                 display_name="Bearing Overheat",
-                properties={},
+                properties={"severity_tier": "DEGRADED"},
             ),
             GraphNode(id="sop-stub-1", label="SOP", display_name="SOP-114", properties={}),
         ],
         edges=[
             GraphEdge(
                 source_id="asset-stub-1",
+                target_id="component-stub-1",
+                relationship="COMPRISED_OF",
+            ),
+            GraphEdge(
+                source_id="component-stub-1",
+                target_id="sensor-stub-1",
+                relationship="MONITORED_BY",
+            ),
+            GraphEdge(
+                source_id="sensor-stub-1",
                 target_id="failuremode-stub-1",
-                relationship="INDICATES_FAILURE",
+                relationship="EXHIBITS_ANOMALY",
+                properties={"metric": "bearing_temp", "confidence_weight": 0.82},
             ),
             GraphEdge(
                 source_id="failuremode-stub-1",

@@ -62,7 +62,7 @@ class FailureProbability(BaseModel):
     probability: float = Field(..., ge=0.0, le=1.0)
     predicted_window: FailureWindow
     failure_mode_id: Optional[str] = Field(
-        default=None, description="Neo4j :FailureMode.id, if a specific mode dominates."
+        default=None, description="Phase 1 ontology :FailureMode.id, if a specific mode dominates."
     )
     failure_mode_label: Optional[str] = None
     model_name: str

@@ -29,8 +29,8 @@ app = FastAPI(
     version=settings.app_version,
     description=(
         "Industrial Operating Brain (IOB) — AI Intelligence Platform. "
-        "Phase 0: frozen contracts for GraphRAG, Predictive Maintenance, "
-        "Explainable AI, and the Prescriptive Decision Engine."
+        "Phase 0: frozen API contracts. Phase 1: industrial knowledge ontology "
+        "for GraphRAG, Predictive Maintenance, XAI, and Decision support."
     ),
     debug=settings.debug,
 )

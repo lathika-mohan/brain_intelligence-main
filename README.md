@@ -1,7 +1,7 @@
 # IOB AI Intelligence Platform (`ai-platform/`)
 
 Industrial Operating Brain — AI & Knowledge Engineering subsystem.
-**Phase 0: AI Architecture & Contracts.**
+**Phase 0: AI Architecture & Contracts. Phase 1: Industrial Knowledge Modelling.**
 
 Owner: Member 3 (AI & Knowledge Engineer).
 
@@ -32,7 +32,7 @@ ai-platform/
 │   │       ├── xai.py           # POST /xai/explain
 │   │       └── decision.py      # POST /decision/recommend
 │   ├── graph/
-│   │   ├── schema.py            # Neo4j label/relationship constants
+│   │   ├── schema.py            # Phase 1 Neo4j semantic label/relationship constants
 │   │   └── client.py            # Neo4j driver lifecycle
 │   ├── vector/
 │   │   ├── schema.py            # Qdrant collection constants
@@ -40,13 +40,15 @@ ai-platform/
 │   ├── models/                  # Pydantic v2 schemas (the frozen contracts)
 │   │   ├── common.py            # Shared envelope/enums (APIResponse, etc.)
 │   │   ├── telemetry.py         # Upstream contract (Member 2)
+│   │   ├── ontology.py          # Phase 1 industrial ontology interfaces
 │   │   ├── graphrag.py          # GraphRAG Engine contracts
 │   │   ├── predictive.py        # Predictive Maintenance contracts
 │   │   ├── xai.py               # Explainability contracts
 │   │   └── decision.py          # Decision Engine contracts
 │   └── agents/                  # Reserved for LangGraph orchestration (later phase)
 ├── docs/
-│   ├── neo4j_schema.md          # Graph schema specification
+│   ├── industrial_knowledge_ontology.md # Phase 1 ontology/entity/edge specification
+│   ├── neo4j_schema.md          # Graph semantic schema mirror
 │   ├── qdrant_schema.md         # Vector collection specification
 │   ├── api_contracts.md         # Human-readable API contract reference
 │   └── team_coordination.md     # Upstream/downstream integration notes
@@ -120,6 +122,7 @@ pytest -q
 | XAI (`ShapExplainability.tsx`)  | `docs/api_contracts.md` §3     | `app/models/xai.py`           |
 | Decision Engine                 | `docs/api_contracts.md` §4     | `app/models/decision.py`      |
 | Telemetry ingestion (upstream)  | `docs/api_contracts.md` §5     | `app/models/telemetry.py`     |
+| Industrial ontology / entity dictionary | `docs/industrial_knowledge_ontology.md` | `app/models/ontology.py` |
 | Graph storage schema            | `docs/neo4j_schema.md`         | `app/graph/schema.py`         |
 | Vector storage schema           | `docs/qdrant_schema.md`        | `app/vector/schema.py`        |
 | Team boundaries                 | `docs/team_coordination.md`    | —                              |

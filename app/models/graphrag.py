@@ -64,7 +64,7 @@ class GraphNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    label: str = Field(..., description="Neo4j node label, e.g. 'Asset', 'FailureMode', 'SOP'.")
+    label: str = Field(..., description="Neo4j node label, e.g. 'Asset', 'Component', 'FailureMode', 'SOPStep'.")
     display_name: str
     properties: Dict[str, Any] = Field(default_factory=dict)
 
@@ -74,7 +74,7 @@ class GraphEdge(BaseModel):
 
     source_id: str
     target_id: str
-    relationship: str = Field(..., description="Relationship type, e.g. 'HAS_SENSOR', 'INDICATES_FAILURE'.")
+    relationship: str = Field(..., description="Relationship type, e.g. 'MONITORED_BY', 'EXHIBITS_ANOMALY'.")
     properties: Dict[str, Any] = Field(default_factory=dict)
 
 
