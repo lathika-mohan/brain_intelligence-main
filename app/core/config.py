@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # --- Runtime ---
     app_env: Literal["development", "staging", "production"] = "development"
     app_name: str = "IOB AI Intelligence Platform"
-    app_version: str = "0.1.0"
+    app_version: str = "0.4.0"  # Phase 4 — Embedding & Semantic Search
     api_v1_prefix: str = "/api/v1"
     log_level: str = "INFO"
     debug: bool = True
@@ -55,20 +55,35 @@ class Settings(BaseSettings):
     qdrant_collection_sop_docs: str = "sop_documents"
     qdrant_collection_manuals: str = "technical_manuals"
     qdrant_collection_incidents: str = "incident_reports"
-    qdrant_vector_size: int = 384
+    qdrant_collection_operational: str = "operational_knowledge_v4"  # Phase 4 primary
+    qdrant_vector_size: int = 768  # Phase 4: all-mpnet-base-v2
     qdrant_distance_metric: Literal["Cosine", "Euclid", "Dot"] = "Cosine"
 
-    # --- Embeddings ---
-    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_device: Literal["cpu", "cuda"] = "cpu"
+    # --- Embeddings -- Phase 4 ---
+    # Production default: sentence-transformers/all-mpnet-base-v2 (768d)
+    # Alternative high-performance: BAAI/bge-large-en-v1.5 (1024d)
+    # Legacy fallback: sentence-transformers/all-MiniLM-L6-v2 (384d)
+    embedding_model_name: str = "sentence-transformers/all-mpnet-base-v2"
+    embedding_device: Literal["cpu", "cuda", "mps"] = "cpu"
     embedding_batch_size: int = 32
-    embedding_max_seq_length: int = 256
+    embedding_max_seq_length: int = 512  # Phase 4: increased for technical docs
+    embedding_normalize: bool = True
+    embedding_trust_remote_code: bool = False
 
-    # --- GraphRAG ---
+    # --- Vector Search -- Phase 4 ---
+    vector_score_threshold: float = 0.70
+    vector_default_top_k: int = 8
+    vector_max_top_k: int = 50
+    vector_search_ef: int = 128
+    vector_search_exact: bool = False
+
+    # --- GraphRAG -- Phase 4 tuning ---
     graphrag_top_k_vector: int = 8
     graphrag_max_graph_hops: int = 3
-    graphrag_min_confidence_threshold: float = 0.55
+    graphrag_min_confidence_threshold: float = 0.70  # Phase 4: stricter
     graphrag_max_context_chunks: int = 12
+    graphrag_score_threshold: float = 0.70
+    graphrag_rerank_enabled: bool = True
 
     # --- Predictive Maintenance ---
     pdm_model_registry_path: str = "./artifacts/models"

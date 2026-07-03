@@ -47,6 +47,16 @@ anthropic==0.40.0
 reportlab==4.2.2
 python-magic==0.4.27
 
+# --- Phase 4: Embedding & Semantic Search ---
+# sentence-transformers already pinned above (3.1.1)
+# qdrant-client already pinned above (1.11.3)
+# Optional acceleration
+torch>=2.2.0
+# HuggingFace hub for model caching
+huggingface-hub>=0.24.0
+# Tokenizers explicitly
+tokenizers>=0.19.0
+
 # --- Dev / test tooling ---
 pytest==8.3.3
 pytest-asyncio==0.24.0
