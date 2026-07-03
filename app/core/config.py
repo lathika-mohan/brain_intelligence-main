@@ -77,13 +77,22 @@ class Settings(BaseSettings):
     vector_search_ef: int = 128
     vector_search_exact: bool = False
 
-    # --- GraphRAG -- Phase 4 tuning ---
+    # --- GraphRAG -- Phase 5 hybrid engine ---
     graphrag_top_k_vector: int = 8
     graphrag_max_graph_hops: int = 3
-    graphrag_min_confidence_threshold: float = 0.70  # Phase 4: stricter
+    graphrag_min_confidence_threshold: float = 0.70
     graphrag_max_context_chunks: int = 12
-    graphrag_score_threshold: float = 0.70
+    graphrag_score_threshold: float = 0.55  # Phase 5: lowered for broader retrieval
     graphrag_rerank_enabled: bool = True
+    graphrag_rrf_k: int = 60  # RRF smoothing constant
+
+    # --- LLM (Phase 5 synthesis) ---
+    llm_provider: str = "mock"  # "openai" | "anthropic" | "mock"
+    llm_model_name: str = "mock-llm-v1"
+    llm_max_tokens: int = 1024
+    llm_temperature: float = 0.1
+    llm_api_key: str = ""  # set via OPENAI_API_KEY or ANTHROPIC_API_KEY env vars
+    llm_base_url: str = ""  # optional custom endpoint
 
     # --- Predictive Maintenance ---
     pdm_model_registry_path: str = "./artifacts/models"

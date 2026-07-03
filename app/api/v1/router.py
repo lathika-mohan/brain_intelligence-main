@@ -1,15 +1,14 @@
 """
 Aggregated version-1 API router.
 
-Wires the implemented Phase 0 stub routers (GraphRAG contract + XAI contract)
+Wires the implemented Phase 0/5 routers (GraphRAG engine + XAI contract)
 behind the single ``api_router`` consumed by ``app.main:app`` at
 ``settings.api_v1_prefix`` (default ``/api/v1``).
 
 Note: endpoints owned by other team members (decision engine, predictive,
 ingestion, health) are intentionally **not** defined here — those are separate
-deliverables and must not be stubbed out as placeholders in Phase 2. The
-GraphRAG/decision engine will later bind the ``app.graph`` services built in
-Phase 2 into ``/graphrag`` once the fusion pipeline lands.
+deliverables and must not be stubbed out as placeholders. The GraphRAG
+engine (Phase 5) binds the full hybrid pipeline into ``/graphrag``.
 """
 from __future__ import annotations
 
@@ -19,13 +18,15 @@ from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
 
-# Phase 0/2 core routers — import with graceful fallback for contract restoration
+# Phase 5 — GraphRAG Engine (primary endpoint powering GraphRagPanel.tsx)
 try:
     from app.api.v1.graphrag import router as graphrag_router
+    logger.info("GraphRAG router loaded (Phase 5 hybrid engine)")
 except Exception as e:  # pragma: no cover
     logger.warning("graphrag router import failed: %s", e)
     graphrag_router = APIRouter()
 
+# Phase 0/2 — XAI router
 try:
     from app.api.v1.xai import router as xai_router
 except Exception as e:  # pragma: no cover
