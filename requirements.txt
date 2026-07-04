@@ -19,6 +19,8 @@ xgboost==2.1.1
 scikit-learn==1.5.2
 numpy==1.26.4
 pandas==2.2.3
+# Phase 6: thread-safe model artifact serialization
+joblib>=1.4.2
 
 # --- Explainable AI ---
 shap==0.46.0

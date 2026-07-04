@@ -5,10 +5,11 @@ Wires the implemented Phase 0/5 routers (GraphRAG engine + XAI contract)
 behind the single ``api_router`` consumed by ``app.main:app`` at
 ``settings.api_v1_prefix`` (default ``/api/v1``).
 
-Note: endpoints owned by other team members (decision engine, predictive,
+Note: endpoints owned by other team members (decision engine, telemetry
 ingestion, health) are intentionally **not** defined here — those are separate
 deliverables and must not be stubbed out as placeholders. The GraphRAG
-engine (Phase 5) binds the full hybrid pipeline into ``/graphrag``.
+engine (Phase 5) binds the full hybrid pipeline into ``/graphrag``; the
+Phase 6 Predictive Maintenance engine binds into ``/predictive``.
 """
 from __future__ import annotations
 
@@ -52,3 +53,11 @@ try:
     logger.info("Document ingestion router mounted")
 except Exception:
     pass
+
+# Phase 6 — Predictive Maintenance Engine (powers DigitalTwinView.tsx)
+try:
+    from app.api.v1.predictive import router as predictive_router
+    api_router.include_router(predictive_router)
+    logger.info("Predictive maintenance router mounted at /predictive")
+except Exception as e:  # pragma: no cover
+    logger.warning("predictive router not mounted: %s", e)
