@@ -1,15 +1,17 @@
 """
 Aggregated version-1 API router.
 
-Wires the implemented Phase 0/5 routers (GraphRAG engine + XAI contract)
-behind the single ``api_router`` consumed by ``app.main:app`` at
-``settings.api_v1_prefix`` (default ``/api/v1``).
+Wires the implemented routers (GraphRAG, XAI, Predictive Maintenance,
+Decision Engine, Vector Search, Document Ingestion) behind the single
+``api_router`` consumed by ``app.main:app`` at ``settings.api_v1_prefix``
+(default ``/api/v1``).
 
-Note: endpoints owned by other team members (decision engine, telemetry
-ingestion, health) are intentionally **not** defined here — those are separate
+Note: endpoints owned by other team members (telemetry ingestion, platform
+health/gateway) are intentionally **not** defined here — those are separate
 deliverables and must not be stubbed out as placeholders. The GraphRAG
 engine (Phase 5) binds the full hybrid pipeline into ``/graphrag``; the
-Phase 6 Predictive Maintenance engine binds into ``/predictive``.
+Phase 6 Predictive Maintenance engine binds into ``/predictive``; the
+Phase 8 Decision Engine binds into ``/decision``.
 """
 from __future__ import annotations
 
@@ -61,3 +63,12 @@ try:
     logger.info("Predictive maintenance router mounted at /predictive")
 except Exception as e:  # pragma: no cover
     logger.warning("predictive router not mounted: %s", e)
+
+# Phase 8 — AI Decision Engine (prescriptive recommendations)
+try:
+    from app.api.v1.decision import router as decision_router
+    api_router.include_router(decision_router)
+    logger.info("Decision engine router mounted at /decision")
+except Exception as e:  # pragma: no cover
+    logger.warning("decision router not mounted: %s", e)
+

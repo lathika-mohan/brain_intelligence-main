@@ -108,9 +108,25 @@ class Settings(BaseSettings):
     xai_lime_num_samples: int = 500
     xai_min_confidence_threshold: float = 0.5
 
-    # --- Decision Engine ---
+    # --- Decision Engine -- Phase 8 ---
     decision_engine_max_recommendations: int = 5
     decision_engine_risk_horizon_days: int = 30
+    # Severity classification thresholds (RUL days) -> IMMINENT / SCHEDULED / MONITOR
+    decision_engine_imminent_rul_days: float = 3.0
+    decision_engine_scheduled_rul_days: float = 14.0
+    # Failure-probability floor that force-escalates a tier regardless of RUL
+    decision_engine_imminent_probability: float = 0.75
+    decision_engine_scheduled_probability: float = 0.40
+    # Default asset criticality weight applied when the graph lookup misses
+    # (e.g. Neo4j unreachable, or asset not yet catalogued).
+    decision_engine_default_criticality_weight: float = 1.0
+    # Cost-of-inaction model defaults (USD), used when asset-level overrides
+    # are not present on the graph node.
+    decision_engine_default_downtime_cost_per_hour_usd: float = 2500.0
+    decision_engine_default_repair_hours: float = 6.0
+    decision_engine_planned_maintenance_discount: float = 0.35
+    # Risk Priority Number ceiling used to normalise RPN -> [0, 1]
+    decision_engine_rpn_ceiling: float = 1000.0
 
     # --- Telemetry ingestion (upstream contract with Member 2) ---
     telemetry_ingest_queue_url: str = "kafka://localhost:9092/telemetry.raw"
