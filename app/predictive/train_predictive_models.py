@@ -272,7 +272,19 @@ def run_training(
     )
 
     registry: ModelRegistry = get_model_registry(registry_path)
-    registry.save(rul_model, anomaly_model, report)
+    # Save dataset hash placeholder for metadata
+    import hashlib
+    dataset_hash = hashlib.sha256(X_train.to_csv(index=False).encode()).hexdigest()
+    registry.save(rul_model, anomaly_model, report, dataset_hash=dataset_hash)
+    
+    # Phase 12 - Generate baseline stats for Data Drift Check
+    try:
+        from app.predictive.data_drift_checker import DataDriftChecker
+        drift_checker = DataDriftChecker(registry_path=str(registry.path))
+        drift_checker.compute_and_save_baseline(X_train, feature_columns())
+    except ImportError:
+        logger.warning("DataDriftChecker not found, skipping baseline generation.")
+
     write_markdown_report(report, registry.path / "model_evaluation_report.md")
     logger.info("Artifacts + evaluation report written to %s", registry.path.resolve())
     return report

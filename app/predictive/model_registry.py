@@ -1,13 +1,15 @@
 """
-Phase 6 — Model Serialization Lifecycle.
+Phase 6 & 12 — Model Serialization Lifecycle & Production Registry.
 
 Thread-safe registration, storage and low-overhead deserialization of the
-predictive-maintenance model artifacts:
+predictive-maintenance model artifacts with strict version control and metadata:
 
     artifacts/models/
       ├── xgboost_rul_v1.json           (native XGBoost JSON — portable, fast)
       ├── isolation_forest_v1.joblib    (scikit-learn IsolationForest)
-      └── model_evaluation_report.json  (ModelEvaluationReport contract)
+      ├── model_evaluation_report.json  (ModelEvaluationReport contract)
+      ├── baseline_stats.json           (Data drift baselines)
+      └── deployment_metadata.json      (Training timestamp, dataset hash, etc.)
 
 The registry is a process-wide singleton guarded by an ``RLock`` so the
 FastAPI worker threads can hot-load / swap artifacts without races. Loaded
@@ -19,7 +21,8 @@ import json
 import logging
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
+from datetime import datetime
 
 import joblib
 import xgboost as xgb
@@ -33,10 +36,11 @@ logger = logging.getLogger(__name__)
 RUL_MODEL_FILE = "xgboost_rul_v1.json"
 ANOMALY_MODEL_FILE = "isolation_forest_v1.joblib"
 EVAL_REPORT_FILE = "model_evaluation_report.json"
+METADATA_FILE = "deployment_metadata.json"
 
 
 class ModelRegistry:
-    """Thread-safe artifact store for the Phase 6 model lifecycle."""
+    """Thread-safe artifact store for the production model lifecycle."""
 
     def __init__(self, registry_path: str | Path | None = None) -> None:
         settings = get_settings()
@@ -45,6 +49,7 @@ class ModelRegistry:
         self._rul_model: Optional[xgb.XGBRegressor] = None
         self._anomaly_model: Optional[IsolationForest] = None
         self._report: Optional[ModelEvaluationReport] = None
+        self._metadata: Optional[Dict[str, Any]] = None
 
     # -- paths -------------------------------------------------------------
     @property
@@ -63,23 +68,41 @@ class ModelRegistry:
     def report_path(self) -> Path:
         return self._path / EVAL_REPORT_FILE
 
+    @property
+    def metadata_path(self) -> Path:
+        return self._path / METADATA_FILE
+
     # -- save --------------------------------------------------------------
     def save(
         self,
         rul_model: xgb.XGBRegressor,
         anomaly_model: IsolationForest,
         report: ModelEvaluationReport,
+        dataset_hash: str = "unknown"
     ) -> None:
-        """Atomically persist all three artifacts and refresh the cache."""
+        """Atomically persist all artifacts, evaluation metrics, and deployment metadata."""
         with self._lock:
             self._path.mkdir(parents=True, exist_ok=True)
             rul_model.save_model(self.rul_model_path)  # native XGBoost JSON
             joblib.dump(anomaly_model, self.anomaly_model_path)
             self.report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+            
+            # Save Deployment Metadata
+            metadata = {
+                "training_timestamp": datetime.utcnow().isoformat() + "Z",
+                "dataset_hash": dataset_hash,
+                "framework_versions": {
+                    "xgboost": xgb.__version__,
+                    "scikit_learn": joblib.__version__ # approximated via joblib or use sklearn.__version__
+                }
+            }
+            self.metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+            
             self._rul_model = rul_model
             self._anomaly_model = anomaly_model
             self._report = report
-            logger.info("Model artifacts registered at %s", self._path.resolve())
+            self._metadata = metadata
+            logger.info("Model artifacts and metadata registered at %s", self._path.resolve())
 
     # -- load --------------------------------------------------------------
     def artifacts_available(self) -> bool:
@@ -118,12 +141,19 @@ class ModelRegistry:
                 self._report = ModelEvaluationReport.model_validate(payload)
             return self._report
 
+    def load_metadata(self) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            if self._metadata is None and self.metadata_path.exists():
+                self._metadata = json.loads(self.metadata_path.read_text(encoding="utf-8"))
+            return self._metadata
+
     def reload(self) -> None:
         """Drop the in-memory cache (call after retraining)."""
         with self._lock:
             self._rul_model = None
             self._anomaly_model = None
             self._report = None
+            self._metadata = None
 
 
 # ---------------------------------------------------------------------------
