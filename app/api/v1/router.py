@@ -72,3 +72,10 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning("decision router not mounted: %s", e)
 
+# Phase 10 — Isolated AI Service Integration router (/api/v1/ai/*)
+try:
+    from app.ai_service.main_router import ai_router
+    api_router.include_router(ai_router)
+    logger.info("Phase 10 AI service router mounted at /ai")
+except Exception as e:  # pragma: no cover
+    logger.warning("Phase 10 AI service router not mounted: %s", e)

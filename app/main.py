@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
+from app.ai_service.exceptions import install_ai_exception_handlers
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -34,6 +35,8 @@ app = FastAPI(
     ),
     debug=settings.debug,
 )
+
+install_ai_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
