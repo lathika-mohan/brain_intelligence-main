@@ -6,12 +6,13 @@ reads its tunables from a single `Settings` instance obtained via
 `get_settings()`. Values are sourced from environment variables / a local
 `.env` file, following the contract frozen in `.env.example`.
 
+Phase 1 Embedding Lock: all-mpnet-base-v2 / 768d enforced
 No business logic lives here — configuration only.
 """
 from functools import lru_cache
 from typing import List, Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,10 +57,10 @@ class Settings(BaseSettings):
     qdrant_collection_manuals: str = "technical_manuals"
     qdrant_collection_incidents: str = "incident_reports"
     qdrant_collection_operational: str = "operational_knowledge_v4"  # Phase 4 primary
-    qdrant_vector_size: int = 768  # Phase 4: all-mpnet-base-v2
+    qdrant_vector_size: int = 768  # Phase 1 Lock: all-mpnet-base-v2
     qdrant_distance_metric: Literal["Cosine", "Euclid", "Dot"] = "Cosine"
 
-    # --- Embeddings -- Phase 4 ---
+    # --- Embeddings -- Phase 1 / Phase 4 ---
     # Production default: sentence-transformers/all-mpnet-base-v2 (768d)
     # Alternative high-performance: BAAI/bge-large-en-v1.5 (1024d)
     # Legacy fallback: sentence-transformers/all-MiniLM-L6-v2 (384d)
@@ -152,8 +153,73 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
+    # ------------------------------------------------------------------
+    # Phase 1 Embedding Mismatch Lock
+    # ------------------------------------------------------------------
+    @model_validator(mode="after")
+    def _validate_embedding_dimensions(self) -> "Settings":
+        """
+        Phase 1 Hard Gate: Prevent silent Qdrant initialization failures.
+        Ensures embedding_model_name ↔ qdrant_vector_size alignment.
+        """
+        model = self.embedding_model_name.lower()
+        dim = self.qdrant_vector_size
+
+        # Canonical dimension map
+        expected_dim = None
+        if "mpnet" in model:
+            expected_dim = 768
+        elif "minilm" in model or "mini-lm" in model:
+            expected_dim = 384
+        elif "bge-large" in model:
+            expected_dim = 1024
+        elif "bge-base" in model:
+            expected_dim = 768
+        elif "bge-small" in model:
+            expected_dim = 384
+
+        if expected_dim is not None and dim != expected_dim:
+            raise ValueError(
+                f"Dimension mismatch! {self.embedding_model_name} requires "
+                f"{expected_dim} dimensions, got {dim}. "
+                f"Update QDRANT_VECTOR_SIZE / qdrant_vector_size to match."
+            )
+
+        # Extra safety: vector size must be one of the known good sizes
+        if dim not in (384, 768, 1024):
+            raise ValueError(
+                f"QDRANT_VECTOR_SIZE={dim} is not a supported embedding dimension. "
+                f"Supported: 384 (MiniLM), 768 (mpnet/bge-base), 1024 (bge-large)"
+            )
+
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:
     """Return a cached singleton Settings instance."""
     return Settings()
+
+
+# ------------------------------------------------------------------------------
+# Phase 1 Simple os.getenv compatibility shim
+# Allows legacy scripts / iob-integration to import:
+#   from config import EMBEDDING_MODEL_NAME, VECTOR_DIMENSION
+# without pulling in full Pydantic stack.
+# ------------------------------------------------------------------------------
+try:
+    _s = get_settings()
+    EMBEDDING_MODEL_NAME = _s.embedding_model_name
+    VECTOR_DIMENSION = _s.qdrant_vector_size
+except Exception:
+    # Fallback to pure env if Pydantic fails (e.g. during bootstrap)
+    import os
+    EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-mpnet-base-v2")
+    VECTOR_DIMENSION = int(os.getenv("VECTOR_DIMENSION", "768"))
+
+# Validation Check to prevent silent Qdrant initialization failures
+if "mpnet" in EMBEDDING_MODEL_NAME and VECTOR_DIMENSION != 768:
+    raise ValueError(f"Dimension mismatch! {EMBEDDING_MODEL_NAME} requires 768 dimensions, got {VECTOR_DIMENSION}.")
+elif "MiniLM" in EMBEDDING_MODEL_NAME or "minilm" in EMBEDDING_MODEL_NAME.lower():
+    if VECTOR_DIMENSION != 384:
+        raise ValueError(f"Dimension mismatch! {EMBEDDING_MODEL_NAME} requires 384 dimensions, got {VECTOR_DIMENSION}.")
