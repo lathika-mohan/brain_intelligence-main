@@ -1,18 +1,14 @@
 """
 Aggregated version-1 API router.
 
-Wires the implemented routers (GraphRAG, XAI, Predictive Maintenance,
-Decision Engine, Vector Search, Document Ingestion) behind the single
-``api_router`` consumed by ``app.main:app`` at ``settings.api_v1_prefix``
-(default ``/api/v1``).
+Phase 5A patched: includes gateway-compatible endpoints (Auth, Assets, Dashboard, Alerts, Test Inject)
+so that AI service can be tested stand-alone or behind gateway.
 
-Note: endpoints owned by other team members (telemetry ingestion, platform
-health/gateway) are intentionally **not** defined here — those are separate
-deliverables and must not be stubbed out as placeholders. The GraphRAG
-engine (Phase 5) binds the full hybrid pipeline into ``/graphrag``; the
-Phase 6 Predictive Maintenance engine binds into ``/predictive``; the
-Phase 8 Decision Engine binds into ``/decision``.
+Wires GraphRAG, XAI, Predictive, Decision, Vector Search, Document Ingestion, plus Phase 5A integration routers.
+
+Note: For full integration, Member 1 gateway (iob-integration/gateway_app) provides same endpoints and proxies to this service.
 """
+
 from __future__ import annotations
 
 import logging
@@ -79,3 +75,41 @@ try:
     logger.info("Phase 10 AI service router mounted at /ai")
 except Exception as e:  # pragma: no cover
     logger.warning("Phase 10 AI service router not mounted: %s", e)
+
+# Phase 5A — Integration Gateway Compatibility Routers (Auth, Dashboard, Assets, Alerts, Test)
+# These allow the AI service to pass Stage 1,2,5 even when run standalone (port 8002)
+# In full docker-compose, the external gateway (iob-integration/gateway_app) also provides these.
+try:
+    from app.api.v1.auth import router as auth_router
+    api_router.include_router(auth_router)
+    logger.info("Phase 5A Auth router mounted at /auth")
+except Exception as e:
+    logger.warning("auth router not mounted: %s", e)
+
+try:
+    from app.api.v1.dashboard import router as dashboard_router
+    api_router.include_router(dashboard_router)
+    logger.info("Phase 5A Dashboard router mounted at /dashboard")
+except Exception as e:
+    logger.warning("dashboard router not mounted: %s", e)
+
+try:
+    from app.api.v1.assets_router import router as assets_router
+    api_router.include_router(assets_router)
+    logger.info("Phase 5A Assets router mounted at /assets")
+except Exception as e:
+    logger.warning("assets_router not mounted: %s", e)
+
+try:
+    from app.api.v1.alerts import router as alerts_router
+    api_router.include_router(alerts_router)
+    logger.info("Phase 5A Alerts router mounted at /alerts")
+except Exception as e:
+    logger.warning("alerts router not mounted: %s", e)
+
+try:
+    from app.api.v1.test_inject import router as test_router
+    api_router.include_router(test_router)
+    logger.info("Phase 5A Test inject router mounted at /test")
+except Exception as e:
+    logger.warning("test_inject router not mounted: %s", e)

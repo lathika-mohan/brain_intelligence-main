@@ -1,0 +1,62 @@
+[92m🚀 INITIALIZING PHASE 5 SYSTEM INTEGRATION SUITE[0m
+
+[94m============================================================[0m
+[94mSTAGE 1: Auth (Member 1 Gateway Verification)[0m
+[94m============================================================[0m
+  Sending credentials to http://127.0.0.1:8000/api/v1/auth/login...
+  [92m✓ Authentication payload accepted.[0m
+  [92m✓ Extracted valid Bearer Access Token.[0m
+  [92m✓ /overview route successfully authorized.[0m
+
+[94m============================================================[0m
+[94mSTAGE 2: Assets / Real Database Validation (Member 1 + 2)[0m
+[94m============================================================[0m
+  [92m✓ Assets endpoint returned status 200.[0m
+  [92m✓ Found 5 raw assets in database layer.[0m
+  Selected target asset for AI evaluation layers: [93mmachine07[0m
+
+[94m============================================================[0m
+[94mSTAGE 3: Live Telemetry & Handshake State (Member 1 + 2)[0m
+[94m============================================================[0m
+  Connecting to live stream at: ws://127.0.0.1:8001/stream?token=***...
+  [92m✓ WebSocket Handshake established. Streaming active.[0m
+  Initial frame received: [93m{"asset_id": "machine07", "timestamp": "2026-07-09T05:09:19.069982+00:00", "telemetry": {"vibration": 2.1, "temperature"...[0m
+  ⚠️  [93mACTION REQUIRED:[0m Tell Member 2 to kill the telemetry simulator container now...
+  Awaiting state transition signature in packet frame (Timeout 15s)...
+  (In auto-mode, gateway auto-degrades after 2-3 packets)
+    ... packet: {"asset_id": "machine07", "timestamp": "2026-07-09T05:09:19.671122+00:00", "telemetry": {"vibration"
+    ... packet: {"asset_id": "machine07", "timestamp": "2026-07-09T05:09:20.372627+00:00", "telemetry": {"vibration"
+    ... packet: {"asset_id": "machine07", "timestamp": "2026-07-09T05:09:21.373597+00:00", "status": "disconnected",
+  [92mDetected degraded transition: {"asset_id": "machine07", "timestamp": "2026-07-09T05:09:21.373597+00:00", "status": "disconnected", "simulator_live": f[0m
+  [92m✓ ConnectionStatusBadge mapping verified. System recognized simulator drop.[0m
+
+[94m============================================================[0m
+[94mSTAGE 4: AI Production Services Gateway Pass-Through (Your Layer)[0m
+[94m============================================================[0m
+  Routing predictive infer for asset machine07 through edge gateway...
+  Infer status: 200, body: {"success":true,"data":{"asset_id":"machine07","component_id":null,"risk_score":0.7452,"failure_probability":0.7452,"rul":{"value_days":15.29,"lower_bound_days":10.19,"upper_bound_days":20.38,"confidence_level":0.9,"model_name":"xgboost_rul_v1","model_version":"1.0.0"},"failure_probability_detail":{
+  [92m✓ Inference response reached destination.[0m
+  Verified Envelope Field Assertions:
+  [92m✓ Field 'risk_score' is present and explicitly named.[0m
+  Explain status: 200
+  [92m✓ XAI SHAP explanation payload retrieved.[0m
+  [92m✓ Real dynamic SHAP impact map found.[0m
+  GraphRAG status: 200
+  [92m✓ GraphRAG Engine resolved node pathways.[0m
+  [92m✓ Citations array validated. Graph entities linked cleanly.[0m
+
+[94m============================================================[0m
+[94mSTAGE 5: Reactive Alarm Propagation Engine (Member 2)[0m
+[94m============================================================[0m
+  Injecting hardware tripwire condition...
+  Inject status: 200, body: {"success":true,"data":{"id":"13affdaa-59c1-495f-a74e-cc99470d591f","alert_id":"5fdb903d-f7b6-4a08-ba94-826ee43044d3","asset_id":"machine07","metric":"bearing_temperature","value":145.2,"severity":"CRITICAL","status":"ACTIVE","acknowledged":false,"timestamp":"2026-07-09T05:09:21.422615+00:00","creat
+  [92m✓ Critical alarm state successfully registered.[0m
+  Polling active alert registry queue for propagation speed...
+    Poll alerts count: 1
+  [92m✓ Alarm visible on engine cluster within seconds. Operational bus secure.[0m
+
+**********************************************************************
+[92m🎉 STATUS: SUCCESS! ALL 5 SERVICE INTERFACES COMPLY WITH CRITICAL CONTRACTS.[0m
+[92mPROCEED TO DECLARE INTEGRATION FREEZE WITH THE TEAM PROMPTLY.[0m
+**********************************************************************
+
