@@ -1,5 +1,6 @@
 import { apiClient } from '@/api';
 import { Chat } from '@/types';
+import { AI_UNAVAILABLE_ENVELOPE } from './aiUnavailable';
 
 /**
  * Section 8 Service Interface Mapping: ChatService
@@ -24,7 +25,7 @@ export const ChatService = {
       return {
         messageId: `msg-${Date.now()}`,
         sender: 'AI_ENGINE',
-        payload: `Diagnostic Copilot Analysis for: "${prompt}". Root cause isolation indicates possible thermal boundary wear. Recommend verifying lubrication pressure lines.`,
+        payload: AI_UNAVAILABLE_ENVELOPE.ui_message,
         timestamp: new Date().toLocaleTimeString(),
       };
     }

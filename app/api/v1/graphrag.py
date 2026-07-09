@@ -19,6 +19,12 @@ router = APIRouter(prefix="/graphrag", tags=["graphrag"])
 def _utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
+def _is_out_of_domain(query_text: str) -> bool:
+    lowered = query_text.lower()
+    out_of_domain_terms = {"recipe", "cookie", "cookies", "chocolate", "cake", "travel", "poem", "movie", "weather", "stock", "sports", "politics"}
+    industrial_terms = {"machine", "asset", "pump", "bearing", "centrifuge", "seal", "vibration", "maintenance", "threshold", "failure", "sop", "shutdown", "telemetry", "compressor", "turbine", "motor"}
+    return any(term in lowered for term in out_of_domain_terms) and not any(term in lowered for term in industrial_terms)
+
 @router.post("/query")
 async def graphrag_query(request: Request):
     request_id = str(uuid.uuid4())
@@ -32,6 +38,28 @@ async def graphrag_query(request: Request):
         raise HTTPException(status_code=400, detail="Missing query_text / message field")
 
     asset_id = body.get("asset_id")
+
+    if _is_out_of_domain(query_text):
+        refusal = "I do not possess domain information regarding recipes or non-industrial processes in my knowledge base."
+        fallback_data = {
+            "answer": refusal,
+            "citations": [],
+            "context_chunks": [],
+            "graph_nodes": [],
+            "graph_edges": [],
+            "overall_confidence": 1.0,
+            "out_of_domain": True,
+            "generated_at": _utc_now_iso(),
+        }
+        return JSONResponse(content={
+            "success": True,
+            "data": fallback_data,
+            "citations": [],
+            "answer": refusal,
+            "error": None,
+            "request_id": request_id,
+            "generated_at": _utc_now_iso(),
+        })
 
     # Try to build proper request and call service
     try:

@@ -111,7 +111,27 @@ def inject_alert(asset_id: str, metric: str, value: float) -> Dict:
 
 def get_active_alerts() -> List[Dict]:
     with _lock:
-        return list(_alerts)
+        return [a for a in _alerts if a.get("status") not in {"RESOLVED", "CLOSED"}]
+
+def resolve_alerts(alert_id: str | None = None, asset_id: str | None = None) -> List[Dict]:
+    """Resolve active alerts matching an alert id and/or asset id.
+
+    This keeps the demo alert state machine bounded between sequential
+    rehearsal loops: injected alarms become ACTIVE, then move to RESOLVED
+    without requiring a container restart or an external queue drain.
+    """
+    resolved: List[Dict] = []
+    now = datetime.now(timezone.utc).isoformat()
+    with _lock:
+        for alert in _alerts:
+            matches_id = not alert_id or alert.get("id") == alert_id or alert.get("alert_id") == alert_id
+            matches_asset = not asset_id or alert.get("asset_id") == asset_id
+            if matches_id and matches_asset and alert.get("status") not in {"RESOLVED", "CLOSED"}:
+                alert["status"] = "RESOLVED"
+                alert["resolved"] = True
+                alert["resolved_at"] = now
+                resolved.append(dict(alert))
+    return resolved
 
 def set_simulator_live(live: bool):
     global _simulator_live
