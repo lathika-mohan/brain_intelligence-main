@@ -36,6 +36,18 @@ api_router = APIRouter()
 api_router.include_router(graphrag_router)
 api_router.include_router(xai_router)
 
+# Stage 1 — Member 3 AI gateway relay routes (/api/v1/ai/*)
+# app.api owns the contract-required `/ai` prefix; this registration connects
+# it to the repository's existing versioned router without disturbing any
+# previously mounted API modules.
+try:
+    from app.api import router as ai_gateway_router
+
+    api_router.include_router(ai_gateway_router)
+    logger.info("Stage 1 AI gateway router mounted at /ai")
+except Exception as e:  # pragma: no cover
+    logger.warning("Stage 1 AI gateway router not mounted: %s", e)
+
 # Phase 4 — Vector Search Service
 try:
     from app.api.v1.vector_search import router as vector_search_router
