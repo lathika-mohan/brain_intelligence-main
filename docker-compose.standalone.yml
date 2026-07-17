@@ -1,0 +1,57 @@
+# Phase 4 — Standalone Build Verification
+# Temporary compose file to eliminate network dependency blockers
+# Adapted for root-level Dockerfile (not ai_platform subdirectory)
+version: '3.8'
+
+services:
+  ai-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_PROVIDER=mock
+      - EMBEDDING_MODEL_NAME=all-mpnet-base-v2
+      - QDRANT_VECTOR_SIZE=768
+      - NEO4J_URI=bolt://neo4j:7687
+      - QDRANT_URL=http://qdrant:6333
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=changeme_neo4j_password
+      - PDM_INFERENCE_FALLBACK_MODE=heuristic
+    depends_on:
+      - neo4j
+      - qdrant
+
+  neo4j:
+    image: neo4j:5.24-community
+    container_name: iob-standalone-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/changeme_neo4j_password
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.3
+    container_name: iob-standalone-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  qdrant_data:

@@ -39,6 +39,7 @@ app = FastAPI(
 
 install_ai_exception_handlers(app)
 
+<<<<<<< HEAD
 # Phase 0: Internal-only guard — validates X-Internal-Service-Token or JWT service token
 # Bypass for health/docs in dev
 app.add_middleware(InternalOnlyGuardMiddleware)
@@ -57,6 +58,8 @@ if settings.app_env == "production":
 else:
     logger.info(f"Dev CORS origins (includes frontend for standalone testing): {cors_origins}")
 
+=======
+>>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
