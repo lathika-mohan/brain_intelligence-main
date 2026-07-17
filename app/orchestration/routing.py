@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import Any, List
 
 from app.orchestration.state import AgentName, AgentState
 
@@ -64,10 +64,16 @@ def plan_route(state: AgentState) -> List[AgentName]:
     return [AgentName.RETRIEVAL, AgentName.KNOWLEDGE, AgentName.FINALIZER]
 
 
-def supervisor_next(state: AgentState) -> str:
+def supervisor_next(raw_state: AgentState | dict[str, Any]) -> str:
+    from app.orchestration.utils import ensure_state
+    state = ensure_state(raw_state)
     if state.terminal or state.transition_count >= state.max_transitions:
         state.terminal = True
         return AgentName.END.value
+    if getattr(state, "next_route", None):
+        nxt_val = state.next_route
+        state.next_route = None
+        return nxt_val
     if not state.route_plan:
         state.route_plan = plan_route(state)
     if not state.route_plan:
@@ -77,7 +83,9 @@ def supervisor_next(state: AgentState) -> str:
     return nxt.value
 
 
-def next_after_agent(state: AgentState) -> str:
+def next_after_agent(raw_state: AgentState | dict[str, Any]) -> str:
+    from app.orchestration.utils import ensure_state
+    state = ensure_state(raw_state)
     if state.transition_count >= state.max_transitions:
         state.terminal = True
         return AgentName.FINALIZER.value

@@ -109,6 +109,14 @@ ai_router = APIRouter(
     },
 )
 
+try:
+    from app.ai_service.integration.ui_router import ui_router
+    ai_router.include_router(ui_router)
+    logger.info("Phase 11 UI integration sub-router mounted at /ai/ui")
+except Exception as exc:  # pragma: no cover
+    logger.warning("Phase 11 UI integration sub-router not mounted: %s", exc)
+
+
 
 @ai_router.get(
     "/health",

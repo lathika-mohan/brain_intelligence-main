@@ -6,16 +6,7 @@ Phase 0 Enforcement:
   and will be removed in Phase 0.5 after gateway provides same contract.
 - Single Gateway Architecture: brain_intelligence is internal-only, mounted at /api/v1, gateway proxies via /api/v1/ai/*
 
-<<<<<<< HEAD
-Wiring matches existing repo but adds explicit PHASE0 markings.
-=======
-Phase 5A patched: includes gateway-compatible endpoints (Auth, Assets, Dashboard, Alerts, Test Inject)
-so that AI service can be tested stand-alone or behind gateway.
-
-Wires GraphRAG, XAI, Predictive, Decision, Vector Search, Document Ingestion, plus Phase 5A integration routers.
-
-Note: For full integration, Member 1 gateway (iob-integration/gateway_app) provides same endpoints and proxies to this service.
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
+Wiring matches existing repo but adds explicit PHASE0 markings alongside Phase 5A compatibility endpoints.
 """
 
 from __future__ import annotations
@@ -47,19 +38,11 @@ api_router.include_router(graphrag_router)
 api_router.include_router(xai_router)
 
 # Stage 1 — Member 3 AI gateway relay routes (/api/v1/ai/*)
-<<<<<<< HEAD
 # app.api owns the contract-required /ai prefix; this registration connects
-=======
-# app.api owns the contract-required `/ai` prefix; this registration connects
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 # it to the repository's existing versioned router without disturbing any
 # previously mounted API modules.
 try:
     from app.api import router as ai_gateway_router
-<<<<<<< HEAD
-=======
-
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
     api_router.include_router(ai_gateway_router)
     logger.info("Stage 1 AI gateway router mounted at /ai")
 except Exception as e:  # pragma: no cover
@@ -85,11 +68,7 @@ except Exception:
 try:
     from app.api.v1.predictive import router as predictive_router
     api_router.include_router(predictive_router)
-<<<<<<< HEAD
     logger.info("Predictive maintenance router mounted at /predictive — FROZEN Phase0")
-=======
-    logger.info("Predictive maintenance router mounted at /predictive")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:  # pragma: no cover
     logger.warning("predictive router not mounted: %s", e)
 
@@ -97,11 +76,7 @@ except Exception as e:  # pragma: no cover
 try:
     from app.api.v1.decision import router as decision_router
     api_router.include_router(decision_router)
-<<<<<<< HEAD
     logger.info("Decision engine router mounted at /decision — FROZEN Phase0")
-=======
-    logger.info("Decision engine router mounted at /decision")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:  # pragma: no cover
     logger.warning("decision router not mounted: %s", e)
 
@@ -109,7 +84,6 @@ except Exception as e:  # pragma: no cover
 try:
     from app.ai_service.main_router import ai_router
     api_router.include_router(ai_router)
-<<<<<<< HEAD
     logger.info("Phase 10 AI service router mounted at /ai — FROZEN")
 except Exception as e:  # pragma: no cover
     logger.warning("Phase 10 AI service router not mounted: %s", e)
@@ -125,62 +99,33 @@ try:
     from app.api.v1.auth import router as auth_router
     api_router.include_router(auth_router)
     logger.warning("PHASE0 FLAGGED SHIM: Auth router mounted at /auth — OWNERSHIP: Gateway Member 2, to be removed in Phase 0.5")
-=======
-    logger.info("Phase 10 AI service router mounted at /ai")
-except Exception as e:  # pragma: no cover
-    logger.warning("Phase 10 AI service router not mounted: %s", e)
-
-# Phase 5A — Integration Gateway Compatibility Routers (Auth, Dashboard, Assets, Alerts, Test)
-# These allow the AI service to pass Stage 1,2,5 even when run standalone (port 8002)
-# In full docker-compose, the external gateway (iob-integration/gateway_app) also provides these.
-try:
-    from app.api.v1.auth import router as auth_router
-    api_router.include_router(auth_router)
-    logger.info("Phase 5A Auth router mounted at /auth")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:
     logger.warning("auth router not mounted: %s", e)
 
 try:
     from app.api.v1.dashboard import router as dashboard_router
     api_router.include_router(dashboard_router)
-<<<<<<< HEAD
     logger.warning("PHASE0 FLAGGED SHIM: Dashboard router mounted at /dashboard — OWNERSHIP: Gateway Member 2")
-=======
-    logger.info("Phase 5A Dashboard router mounted at /dashboard")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:
     logger.warning("dashboard router not mounted: %s", e)
 
 try:
     from app.api.v1.assets_router import router as assets_router
     api_router.include_router(assets_router)
-<<<<<<< HEAD
     logger.warning("PHASE0 FLAGGED SHIM: Assets router mounted at /assets — OWNERSHIP: Gateway Member 2")
-=======
-    logger.info("Phase 5A Assets router mounted at /assets")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:
     logger.warning("assets_router not mounted: %s", e)
 
 try:
     from app.api.v1.alerts import router as alerts_router
     api_router.include_router(alerts_router)
-<<<<<<< HEAD
     logger.warning("PHASE0 FLAGGED SHIM: Alerts router mounted at /alerts — OWNERSHIP: Gateway Member 2")
-=======
-    logger.info("Phase 5A Alerts router mounted at /alerts")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:
     logger.warning("alerts router not mounted: %s", e)
 
 try:
     from app.api.v1.test_inject import router as test_router
     api_router.include_router(test_router)
-<<<<<<< HEAD
     logger.warning("PHASE0 FLAGGED SHIM: Test inject router mounted at /test — OWNERSHIP: Gateway Member 2")
-=======
-    logger.info("Phase 5A Test inject router mounted at /test")
->>>>>>> f853400ee01fb2edf09eced421ba1c168941d6ee
 except Exception as e:
     logger.warning("test_inject router not mounted: %s", e)

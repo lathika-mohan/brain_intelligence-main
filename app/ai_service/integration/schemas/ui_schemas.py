@@ -307,6 +307,9 @@ class UIGraphRAGPayload(BaseModel):
     citations: List[Dict[str, Any]] = Field(default_factory=list)
     vectorHits: int = 0
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    badge: Optional[str] = None
+    warningLevel: Optional[str] = None
+    color: Optional[Any] = None
     generatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -349,6 +352,8 @@ class UIShapExplanation(BaseModel):
         default_factory=dict,
         description="Headline + narrative + contributing failure modes (as dict for flexibility).",
     )
+    waterfall: Optional[Dict[str, Any]] = None
+    forcePlot: Optional[Dict[str, Any]] = None
     generatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

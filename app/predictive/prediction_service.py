@@ -22,11 +22,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import threading
 import time
 import uuid
 from datetime import timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -60,6 +61,11 @@ _RUL_BOUND_FRACTION = 0.30
 
 class PredictionServiceUnavailable(RuntimeError):
     """Raised when models are missing and fallback mode is 'reject'."""
+
+
+class BatchPredictionResult(NamedTuple):
+    rul_days: float
+    anomaly_score: float
 
 
 class PredictionService:
@@ -110,6 +116,26 @@ class PredictionService:
             latency_ms=(time.perf_counter() - started) * 1000.0,
         )
         return response
+
+    def predict_batch(self, features: pd.DataFrame) -> List[BatchPredictionResult]:
+        """Run batch inference across rows of a DataFrame."""
+        if not self._registry.artifacts_available():
+            raise FileNotFoundError("Models not trained yet in this environment.")
+        results = []
+        for idx in range(len(features)):
+            row_df = features.iloc[[idx]]
+            rul_hours = self._predict_rul(row_df)
+            try:
+                model = self._registry.load_anomaly_model()
+                score = float(model.decision_function(row_df)[0]) if hasattr(model, "decision_function") else float(model.predict(row_df)[0])
+            except Exception:
+                score = 0.0
+            if math.isnan(rul_hours) or math.isinf(rul_hours):
+                rul_hours = 500.0
+            if math.isnan(score) or math.isinf(score):
+                score = 0.0
+            results.append(BatchPredictionResult(rul_days=max(0.0, float(rul_hours) / 24.0), anomaly_score=float(score)))
+        return results
 
     # ------------------------------------------------------------------ #
     # Validation                                                          #

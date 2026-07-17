@@ -653,11 +653,16 @@ def adapt_explainability_payload(
                 }
             )
 
+    method_val = getattr(explanation, "method", "SHAP")
+    method_str = method_val.value if hasattr(method_val, "value") else str(method_val)
+    scope_val = getattr(explanation, "scope", "LOCAL")
+    scope_str = scope_val.value if hasattr(scope_val, "value") else str(scope_val)
+
     payload = UIShapExplanation(
         predictionId=prediction_id,
         assetId=asset_id,
-        method=str(getattr(explanation, "method", "SHAP")),
-        scope=str(getattr(explanation, "scope", "LOCAL")),
+        method=method_str,
+        scope=scope_str,
         baseValue=float(getattr(explanation, "base_value", 0.0) or 0.0),
         predictionValue=float(getattr(explanation, "predicted_value", 0.0) or 0.0),
         features=features,

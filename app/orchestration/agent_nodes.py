@@ -26,8 +26,17 @@ class AgentNodes:
         state = ensure_state(raw_state)
         state.active_agent = AgentName.SUPERVISOR
         state.append_trace(AgentName.SUPERVISOR.value)
-        if not state.route_plan:
+        if not state.route_plan and not state.terminal and state.transition_count < state.max_transitions:
             state.route_plan = plan_route(state)
+        if state.terminal or state.transition_count >= state.max_transitions:
+            state.terminal = True
+            state.next_route = AgentName.END.value
+        elif state.route_plan:
+            nxt = state.route_plan.pop(0)
+            state.next_route = nxt.value
+            state.active_agent = nxt
+        else:
+            state.next_route = AgentName.FINALIZER.value
         state.compress()
         return export_state(state)
 

@@ -93,6 +93,7 @@ class AgentState(BaseModel):
     component_id: Optional[str] = None
     active_agent: AgentName = AgentName.SUPERVISOR
     route_plan: List[AgentName] = Field(default_factory=list)
+    next_route: Optional[str] = None
     visited_nodes: List[str] = Field(default_factory=list)
     trace: List[AgentTraceStep] = Field(default_factory=list)
     transition_count: int = 0
@@ -202,3 +203,8 @@ class OrchestratorResponse(BaseModel):
     decision: Optional[RecommendationResponse] = None
 
     generated_at: datetime = Field(default_factory=utc_now)
+
+
+# Backward compatibility aliases for multi-agent state contracts
+GraphState = AgentState
+MessageState = AgentState

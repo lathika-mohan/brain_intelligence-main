@@ -110,42 +110,35 @@ ui_router = APIRouter(
 # ---------------------------------------------------------------------------
 # Internal: shared engine dependency proxies
 # ---------------------------------------------------------------------------
-class _LazyEngineDep:
+from fastapi.params import Depends as FastAPIDepends
+
+
+class _LazyEngineDep(FastAPIDepends):
     """A FastAPI ``Depends`` wrapper that defers ``dependencies`` import.
 
-    FastAPI evaluates default values at import time, which means a
-    top-level ``from app.ai_service.dependencies import ...`` would
-    hard-fail the UI router import in test environments where the full
-    backend stack is not on the Python path. This wrapper resolves the
-    underlying ``Depends(get_xxx_engine)`` lazily on first attribute
-    access, so the OpenAPI schema is built from the final ``Depends``
-    object the same way it would be for a hand-rolled endpoint.
+    Inherits from ``fastapi.params.Depends`` so FastAPI recognizes it during route
+    registration, and resolves the underlying dependency getter lazily via property access.
     """
 
-    __slots__ = ("_getter_name", "_resolved")
-
-    def __init__(self, getter_name: str) -> None:
+    def __init__(self, getter_name: str, use_cache: bool = True) -> None:
+        super().__init__(dependency=None, use_cache=use_cache)
         self._getter_name = getter_name
-        self._resolved: object = None
 
-    def _resolve(self):
-        if self._resolved is None:
-            from app.ai_service import dependencies as _deps
+    @property
+    def dependency(self):
+        from app.ai_service import dependencies as _deps
 
-            getter = getattr(_deps, self._getter_name)
-            self._resolved = Depends(getter)
-        return self._resolved
+        return getattr(_deps, self._getter_name)
 
-    def __getattr__(self, item):
-        return getattr(self._resolve(), item)
+    @dependency.setter
+    def dependency(self, value):
+        pass
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"_LazyEngineDep({self._getter_name!r})"
 
     @staticmethod
     def __get_pydantic_json_schema__(schema, generator):  # pragma: no cover
-        # Pydantic v2 hook: tell the schema generator this default is
-        # opaque (it's a FastAPI ``Depends`` marker resolved at runtime).
         return {"not_serialization_default": True}
 
 
@@ -635,6 +628,10 @@ async def preflight(request: Request) -> JSONResponse:
     origin = safe_cors_origin(request_origin, _get_cors_origins())
     headers = build_ui_preflight_headers(origin=origin)
     headers["x-request-id"] = request_id
+    # Starlette's CORSMiddleware blindly appends to existing Vary headers via add_vary_header.
+    # Pop Vary here so CORSMiddleware sets 'Vary: Origin' exactly once instead of 'Origin, Origin'.
+    headers.pop("Vary", None)
+    headers.pop("vary", None)
     return JSONResponse(status_code=204, content=None, headers=headers)
 
 

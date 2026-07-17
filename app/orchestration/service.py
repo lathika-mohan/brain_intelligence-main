@@ -20,7 +20,7 @@ class OrchestrationService:
         state = AgentState.from_request(request, request_id=request_id)
         raw_result = await self._graph.ainvoke(
             state,
-            config={"recursion_limit": min(request.max_transitions, 15)},
+            config={"recursion_limit": max(request.max_transitions * 3, 30)},
         )
         final_state = AgentState.model_validate(raw_result)
         if not final_state.answer:
@@ -42,6 +42,20 @@ class OrchestrationService:
             generated_at=final_state.generated_at,
         )
 
+    async def process_query(self, query: str, session_id: Optional[str] = None, **kwargs: Any) -> dict[str, Any]:
+        """Backward-compatible wrapper for process_query calls."""
+        req_kwargs: dict[str, Any] = {"query_text": query}
+        for k, v in kwargs.items():
+            if hasattr(OrchestratorRequest, k):
+                req_kwargs[k] = v
+        req = OrchestratorRequest(**req_kwargs)
+        resp = await self.execute(req)
+        data = resp.model_dump(mode="json")
+        # Ensure compatibility with both canonical OrchestratorResponse and legacy test assertions
+        data["response"] = resp.answer
+        data["messages"] = [{"role": "assistant", "content": resp.answer}]
+        return data
+
 
 _service_lock = threading.Lock()
 _service: Optional[OrchestrationService] = None
@@ -59,3 +73,7 @@ def reset_orchestration_service() -> None:
     global _service
     with _service_lock:
         _service = None
+
+
+# Backward compatibility alias - OrchestrationService is the canonical standard
+MultiAgentService = OrchestrationService

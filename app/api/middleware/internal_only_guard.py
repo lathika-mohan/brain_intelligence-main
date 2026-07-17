@@ -74,7 +74,7 @@ class InternalOnlyGuardMiddleware(BaseHTTPMiddleware):
             )
             response = await call_next(request)
             # Add header to indicate bypass
-            response.headers["X-Phase0-Warning"] = "Direct AI access in dev only — use gateway in prod"
+            response.headers["X-Phase0-Warning"] = "Direct AI access in dev only - use gateway in prod"
             return response
 
         # Production — strict 403 for direct browser calls

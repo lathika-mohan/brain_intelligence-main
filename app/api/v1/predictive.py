@@ -132,26 +132,12 @@ async def predictive_infer(request: Request):
 
     # Build InferenceRequest if possible
     inference_req = None
-    if body.get("history"):
+    if "history" in body or "features" not in body:
         try:
             from app.models.predictive import InferenceRequest
             inference_req = InferenceRequest.model_validate(body)
         except Exception as e:
-            logger.debug(f"Failed strict InferenceRequest parse: {e}")
-            # attempt synthetic from features even if history present but invalid
-            try:
-                from app.models.predictive import InferenceRequest
-                hist = _features_to_history(asset_id, features)
-                # if hist is list of TelemetryReading, use directly
-                if hist and hasattr(hist[0], 'asset_id'):
-                    inference_req = InferenceRequest(
-                        asset_id=asset_id,
-                        component_id=body.get("component_id"),
-                        history=hist,
-                        horizon_hours=body.get("horizon_hours", 24),
-                    )
-            except Exception as e2:
-                logger.debug(f"Synthetic req failed: {e2}")
+            raise HTTPException(status_code=422, detail=str(e))
     else:
         try:
             from app.models.predictive import InferenceRequest
@@ -169,6 +155,7 @@ async def predictive_infer(request: Request):
     if inference_req is not None:
         try:
             from app.predictive.prediction_service import get_prediction_service
+            from app.predictive.feature_engineering import TelemetryContractError
             service = get_prediction_service()
             result = await service.infer(inference_req)
             result_dict = result.model_dump(mode="json")
@@ -181,6 +168,8 @@ async def predictive_infer(request: Request):
                 result_dict["failure_probability"] = risk_score
             result_data = result_dict
             fallback_used = result.fallback_used
+        except (TelemetryContractError, ValueError) as e:
+            raise HTTPException(status_code=422, detail=str(e))
         except Exception as e:
             logger.debug(f"Real prediction fallback due to: {e}")
 
