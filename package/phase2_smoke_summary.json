@@ -1,0 +1,18 @@
+{
+  "predictive_status_code": 200,
+  "contracts_status_code": 200,
+  "openapi_status_code": 200,
+  "ui_path_count": 9,
+  "ui_paths": [
+    "/api/v1/ai/ui/agent/chat",
+    "/api/v1/ai/ui/agent/chat/stream",
+    "/api/v1/ai/ui/contracts",
+    "/api/v1/ai/ui/cors-check",
+    "/api/v1/ai/ui/digital-twin/{asset_id}",
+    "/api/v1/ai/ui/explain/{prediction_id}",
+    "/api/v1/ai/ui/graphrag/query",
+    "/api/v1/ai/ui/options",
+    "/api/v1/ai/ui/recommendations"
+  ],
+  "predictive_fallback_used": true
+}

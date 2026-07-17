@@ -1,0 +1,66 @@
+{
+  "success": true,
+  "data": {
+    "phase": "11-frontend-integration-support",
+    "version": "0.11.0",
+    "endpoints": [
+      {
+        "path": "/api/v1/ai/ui/digital-twin/{asset_id}",
+        "method": "GET",
+        "feeds": "src/components/DigitalTwinView.tsx",
+        "schema": "UIDigitalTwinPayload"
+      },
+      {
+        "path": "/api/v1/ai/ui/graphrag/query",
+        "method": "POST",
+        "feeds": "src/components/GraphRagPanel.tsx",
+        "schema": "UIGraphRAGPayload"
+      },
+      {
+        "path": "/api/v1/ai/ui/explain/{prediction_id}",
+        "method": "GET",
+        "feeds": "src/components/ShapExplainability.tsx",
+        "schema": "UIShapExplanation"
+      },
+      {
+        "path": "/api/v1/ai/ui/recommendations",
+        "method": "POST",
+        "feeds": "prescriptive-action card panel",
+        "schema": "List[UIRecommendationAction]"
+      },
+      {
+        "path": "/api/v1/ai/ui/agent/chat",
+        "method": "POST",
+        "feeds": "multi-agent chat panel (non-streaming)",
+        "schema": "UIAPIResponse[UIChat]"
+      },
+      {
+        "path": "/api/v1/ai/ui/agent/chat/stream",
+        "method": "POST",
+        "feeds": "multi-agent chat panel (NDJSON stream)",
+        "schema": "AgentStreamEvent[] (NDJSON)"
+      },
+      {
+        "path": "/api/v1/ai/ui/cors-check",
+        "method": "GET",
+        "feeds": "CORS verification (CI / smoke test)",
+        "schema": "CORSStatus"
+      },
+      {
+        "path": "/api/v1/ai/ui/options",
+        "method": "OPTIONS",
+        "feeds": "Browser preflight probe",
+        "schema": "CORS preflight headers"
+      },
+      {
+        "path": "/api/v1/ai/ui/contracts",
+        "method": "GET",
+        "feeds": "Contract manifest for type generation",
+        "schema": "ContractManifest"
+      }
+    ]
+  },
+  "requestId": "phase2-smoke-003",
+  "generatedAt": "2026-07-17T09:03:55.893306+00:00",
+  "error": null
+}

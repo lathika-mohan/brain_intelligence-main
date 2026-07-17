@@ -1,0 +1,93 @@
+diff --git a/app/api/v1/predictive.py b/app/api/v1/predictive.py
+index 1b95de0..31b58e4 100644
+--- a/app/api/v1/predictive.py
++++ b/app/api/v1/predictive.py
+@@ -153,9 +153,19 @@ async def predictive_infer(request: Request):
+             logger.debug(f"Synthetic req failed: {e}")
+ 
+     if inference_req is not None:
++        telemetry_validation_errors: tuple[type[Exception], ...] = (ValueError,)
++        try:
++            from app.predictive.feature_engineering import (
++                TelemetryContractError as _TelemetryContractError,
++            )
++
++            telemetry_validation_errors = (_TelemetryContractError, ValueError)
++        except Exception as e:
++            logger.debug(f"Telemetry validation import unavailable; using ValueError fallback only: {e}")
++
+         try:
+             from app.predictive.prediction_service import get_prediction_service
+-            from app.predictive.feature_engineering import TelemetryContractError
++
+             service = get_prediction_service()
+             result = await service.infer(inference_req)
+             result_dict = result.model_dump(mode="json")
+@@ -168,7 +178,7 @@ async def predictive_infer(request: Request):
+                 result_dict["failure_probability"] = risk_score
+             result_data = result_dict
+             fallback_used = result.fallback_used
+-        except (TelemetryContractError, ValueError) as e:
++        except telemetry_validation_errors as e:
+             raise HTTPException(status_code=422, detail=str(e))
+         except Exception as e:
+             logger.debug(f"Real prediction fallback due to: {e}")
+diff --git a/tests/test_phase6_predictive.py b/tests/test_phase6_predictive.py
+index 98c92d7..f974b25 100644
+--- a/tests/test_phase6_predictive.py
++++ b/tests/test_phase6_predictive.py
+@@ -16,6 +16,7 @@ Run:  pytest tests/test_phase6_predictive.py -q
+ """
+ from __future__ import annotations
+ 
++import builtins
+ from datetime import datetime, timedelta, timezone
+ 
+ import numpy as np
+@@ -398,6 +399,46 @@ class TestPredictiveApi:
+         assert res.status_code == 422
+         assert "does not match" in str(res.json()["detail"])
+ 
++    def test_feature_payload_gracefully_falls_back_when_service_import_unavailable(
++        self, client: TestClient, monkeypatch
++    ):
++        real_import = builtins.__import__
++
++        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
++            if name == "app.predictive.prediction_service":
++                raise ModuleNotFoundError("simulated missing predictive runtime")
++            return real_import(name, globals, locals, fromlist, level)
++
++        monkeypatch.setattr(builtins, "__import__", guarded_import)
++
++        res = client.post(
++            "/api/v1/predictive/infer",
++            json={
++                "asset_id": "asset-101",
++                "component_id": "asset-101-bearing-de",
++                "features": {
++                    "vibration": 4.2,
++                    "temperature": 92.5,
++                    "pressure": 8.2,
++                    "rpm": 2950.0,
++                },
++                "horizon_hours": 24,
++            },
++        )
++
++        assert res.status_code == 200
++        envelope = res.json()
++        assert envelope["success"] is True
++        assert envelope["error"] is None
++        data = envelope["data"]
++        assert data["asset_id"] == "asset-101"
++        assert data["fallback_used"] is True
++        assert "rul" in data
++        assert "failure_probability" in data
++        assert "anomaly_flags" in data
++        assert "generated_at" in data
++        assert "inference_latency_ms" in data
++
+     def test_health_endpoint_reports_ready(self, client: TestClient):
+         res = client.get("/api/v1/predictive/health")
+         assert res.status_code == 200

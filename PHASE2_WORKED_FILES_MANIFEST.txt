@@ -1,0 +1,21 @@
+PHASE 2 WORKED FILES MANIFEST
+=============================
+
+Source files modified in this execution:
+- app/api/v1/predictive.py
+- tests/test_phase6_predictive.py
+
+Source files included for mount-chain context:
+- app/api/v1/router.py
+- app/ai_service/main_router.py
+- app/ai_service/integration/ui_router.py
+
+Verification artifacts:
+- deliverables/phase2/PHASE2_ENGINEERING_EXECUTION_GUIDE_LATHIKA.md
+- deliverables/phase2/phase2_ui_router_contract.log
+- deliverables/phase2/phase2_regression.log
+- deliverables/phase2/phase2_predictive_infer_snapshot.json
+- deliverables/phase2/phase2_ui_contract_manifest_snapshot.json
+- deliverables/phase2/phase2_openapi_ui_paths.json
+- deliverables/phase2/phase2_smoke_summary.json
+- deliverables/phase2/PHASE2_WORKED_FILES_MANIFEST.txt

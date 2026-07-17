@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "data": {
+    "asset_id": "P-101A",
+    "component_id": "bearing",
+    "risk_score": 0.7452,
+    "failure_probability": 0.7452,
+    "rul": {
+      "value_days": 15.29,
+      "lower_bound_days": 10.19,
+      "upper_bound_days": 20.38,
+      "confidence_level": 0.9,
+      "model_name": "xgboost_rul_v1",
+      "model_version": "1.0.0"
+    },
+    "failure_probability_detail": {
+      "probability": 0.7452,
+      "predicted_window": {
+        "earliest": "2026-07-17T09:03:51.125855+00:00",
+        "latest": "2026-07-17T09:03:51.125855+00:00",
+        "most_likely": "2026-07-17T09:03:51.125855+00:00"
+      },
+      "failure_mode_id": "failuremode-bearing-overheat",
+      "failure_mode_label": "Bearing Overheat",
+      "model_name": "xgboost_failure_classifier_v1"
+    },
+    "anomaly_flags": [
+      {
+        "sensor_id": "vib-sensor-1",
+        "metric": "vibration_rms",
+        "anomaly_score": -0.12,
+        "is_anomalous": true,
+        "severity": "HIGH",
+        "detected_at": "2026-07-17T09:03:51.125855+00:00"
+      }
+    ],
+    "explanation_id": "20475413-028f-4ecc-822a-7457546b4e48",
+    "inference_latency_ms": 18.4,
+    "generated_at": "2026-07-17T09:03:51.125855+00:00",
+    "fallback_used": true
+  },
+  "error": null,
+  "request_id": "9bf1f7d0-6009-4671-b4ea-7e9372167d63",
+  "generated_at": "2026-07-17T09:03:51.125906+00:00",
+  "risk_score": 0.7452
+}
