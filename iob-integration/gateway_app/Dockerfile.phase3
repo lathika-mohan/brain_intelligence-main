@@ -1,0 +1,32 @@
+# =============================================================================
+# PHASE 3 — CLEAN GATEWAY IMAGE
+# Member 2 (Gateway) · build context = ./iob-integration
+# -----------------------------------------------------------------------------
+# This replaces the legacy gateway_app/Dockerfile for the Phase 3 smoke stack.
+# The legacy Dockerfile contained a malformed line:
+#     COPY __init__.py ./__init__.py 2>/dev/null || true
+# Shell redirection (`2>/dev/null`, `||`) is illegal in a Dockerfile COPY
+# instruction and breaks the build. This file is syntactically clean, adds
+# wget/curl for healthchecks, and installs the gateway requirements only.
+# =============================================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Healthcheck + diagnostic tooling (wget for compose healthchecks, curl for probes)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python deps first for layer caching
+COPY gateway_app/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the gateway package (gateway_app/__init__.py already makes it a package)
+COPY gateway_app/ ./gateway_app/
+
+EXPOSE 8000
+
+# Gateway on 8000. The WS server (8001) is out of scope for the Phase 3
+# backend-only smoke test and is not started here.
+CMD ["uvicorn", "gateway_app.main:app", "--host", "0.0.0.0", "--port", "8000"]

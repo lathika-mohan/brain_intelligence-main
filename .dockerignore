@@ -1,0 +1,65 @@
+# =============================================================================
+# .dockerignore — Phase 3 build hygiene for the brain_intelligence image.
+# -----------------------------------------------------------------------------
+# The root Dockerfile does `COPY . .`, which without this file would copy the
+# Next.js frontend, node_modules, git history, logs and artifacts into the
+# Python image. That bloats the build, slows it, and risks cache-busting on
+# unrelated frontend changes. This keeps the AI image lean and deterministic.
+# =============================================================================
+
+# --- VCS ---
+.git
+.gitignore
+.gitattributes
+
+# --- Node / Next.js frontend (not needed in the Python AI image) ---
+node_modules
+.next
+out
+dist
+build
+.npm
+.nuxt
+.turbo
+coverage
+*.tsbuildinfo
+
+# --- Python caches / venvs ---
+__pycache__
+*.py[cod]
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.nox
+.tox
+
+# --- Local env / secrets ---
+.env
+.env.*
+!.env.example
+.netrc
+
+# --- Docker artifacts (avoid recursive context) ---
+Dockerfile
+docker-compose*.yml
+
+# --- Logs / reports / scratch output ---
+*.log
+phase2_*.json
+phase2_*.diff
+phase4_verification.py
+phase5_execution_log.txt
+phase7_demo_validator.py
+check_freeze.py
+test_vector_init.py
+
+# --- IDE / OS ---
+.vscode
+.idea
+.DS_Store
+
+# --- Heavy model artifacts (mount as a volume in compose instead) ---
+artifacts/models
+artifacts/embeddings
