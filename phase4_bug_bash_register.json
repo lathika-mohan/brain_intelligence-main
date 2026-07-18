@@ -1,0 +1,74 @@
+{
+  "phase": "4-bug-bash-register",
+  "version": "1.0.0",
+  "session_date": null,
+  "participants": ["Member 3 (Lathika)", "Member 4 (Frontend)"],
+  "duration_minutes": 30,
+  "bugs": [
+    {
+      "bug_id": "BUG-P4-001",
+      "component": null,
+      "observed_behavior": null,
+      "severity": null,
+      "root_cause_layer": null,
+      "verification_test_hash": null,
+      "status": "OPEN",
+      "browser_console_trace": null,
+      "network_response_snippet": null,
+      "fix_commit": null,
+      "regression_test": null
+    },
+    {
+      "bug_id": "BUG-P4-002",
+      "component": null,
+      "observed_behavior": null,
+      "severity": null,
+      "root_cause_layer": null,
+      "verification_test_hash": null,
+      "status": "OPEN",
+      "browser_console_trace": null,
+      "network_response_snippet": null,
+      "fix_commit": null,
+      "regression_test": null
+    },
+    {
+      "bug_id": "BUG-P4-003",
+      "component": null,
+      "observed_behavior": null,
+      "severity": null,
+      "root_cause_layer": null,
+      "verification_test_hash": null,
+      "status": "OPEN",
+      "browser_console_trace": null,
+      "network_response_snippet": null,
+      "fix_commit": null,
+      "regression_test": null
+    },
+    {
+      "bug_id": "BUG-P4-004",
+      "component": null,
+      "observed_behavior": null,
+      "severity": null,
+      "root_cause_layer": null,
+      "verification_test_hash": null,
+      "status": "OPEN",
+      "browser_console_trace": null,
+      "network_response_snippet": null,
+      "fix_commit": null,
+      "regression_test": null
+    },
+    {
+      "bug_id": "BUG-P4-005",
+      "component": null,
+      "observed_behavior": null,
+      "severity": null,
+      "root_cause_layer": null,
+      "verification_test_hash": null,
+      "status": "OPEN",
+      "browser_console_trace": null,
+      "network_response_snippet": null,
+      "fix_commit": null,
+      "regression_test": null
+    }
+  ]
+}

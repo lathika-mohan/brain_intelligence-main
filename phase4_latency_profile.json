@@ -1,0 +1,89 @@
+{
+  "phase": "4-latency-profile",
+  "version": "1.0.0",
+  "session_date": null,
+  "base_url": "http://localhost:8002",
+  "measurements": [
+    {
+      "action_id": "ACT-001",
+      "user_action": "Load DigitalTwinView for P-101A",
+      "endpoint": "GET /api/v1/ai/ui/digital-twin/P-101A",
+      "expected_ms": 800,
+      "acceptable_max_ms": 2000,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-002",
+      "user_action": "Submit GraphRAG query 'Why is P-101A vibrating?'",
+      "endpoint": "POST /api/v1/ai/ui/graphrag/query",
+      "expected_ms": 1200,
+      "acceptable_max_ms": 3000,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-003",
+      "user_action": "Load SHAP explanation for pred-p101a-001",
+      "endpoint": "GET /api/v1/ai/ui/explain/pred-p101a-001",
+      "expected_ms": 600,
+      "acceptable_max_ms": 2000,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-004",
+      "user_action": "Generate recommendations for P-101A",
+      "endpoint": "POST /api/v1/ai/ui/recommendations",
+      "expected_ms": 500,
+      "acceptable_max_ms": 1500,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-005",
+      "user_action": "Send chat message 'Diagnose P-101A'",
+      "endpoint": "POST /api/v1/ai/ui/agent/chat",
+      "expected_ms": 1000,
+      "acceptable_max_ms": 3000,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-006",
+      "user_action": "CORS check endpoint",
+      "endpoint": "GET /api/v1/ai/ui/cors-check",
+      "expected_ms": 100,
+      "acceptable_max_ms": 500,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-007",
+      "user_action": "Stream chat response (first byte to final event)",
+      "endpoint": "POST /api/v1/ai/ui/agent/chat/stream",
+      "expected_ms": 2000,
+      "acceptable_max_ms": 5000,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-008",
+      "user_action": "Re-fetch DigitalTwinView (cached)",
+      "endpoint": "GET /api/v1/ai/ui/digital-twin/P-101A",
+      "expected_ms": 200,
+      "acceptable_max_ms": 800,
+      "actual_ms": null,
+      "pass": null
+    },
+    {
+      "action_id": "ACT-009",
+      "user_action": "Load contract manifest",
+      "endpoint": "GET /api/v1/ai/ui/contracts",
+      "expected_ms": 50,
+      "acceptable_max_ms": 200,
+      "actual_ms": null,
+      "pass": null
+    }
+  ]
+}
