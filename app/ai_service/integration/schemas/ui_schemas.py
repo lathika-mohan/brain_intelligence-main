@@ -332,6 +332,51 @@ class UIShapFeature(BaseModel):
     desc: str
 
 
+# ---------------------------------------------------------------------------
+# SHAP visualization shapes (force plot, waterfall)
+# ---------------------------------------------------------------------------
+class UIForceContribution(BaseModel):
+    """Single contribution in a SHAP force plot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feature: str
+    value: str
+    shapValue: float
+
+
+class UIForcePlot(BaseModel):
+    """SHAP force plot visualization data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    baseValue: float
+    predictionValue: float
+    positive: List[UIForceContribution] = Field(default_factory=list)
+    negative: List[UIForceContribution] = Field(default_factory=list)
+
+
+class UIWaterfallStep(BaseModel):
+    """Single step in a SHAP waterfall plot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feature: str
+    value: str
+    shapValue: float
+    cumulativeValue: float
+
+
+class UIWaterfall(BaseModel):
+    """SHAP waterfall visualization data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    baseValue: float
+    predictionValue: float
+    steps: List[UIWaterfallStep] = Field(default_factory=list)
+
+
 class UIShapExplanation(BaseModel):
     """Full SHAP/LIME payload for ``ShapExplainability.tsx``."""
 

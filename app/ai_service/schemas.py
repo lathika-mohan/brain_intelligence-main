@@ -1,100 +1,147 @@
-"""Phase 1 — Common Infrastructure & Response Contract: the envelope model.
+"""Phase 9/10 — AI service request/response schemas.
 
-This module defines :class:`UIAPIResponseEnvelope`, the **single, frozen**
-top-level shape every ``/api/v1/ai/ui/*`` endpoint must return:
+This module defines the request/response models used by the Phase 10 AI router
+and Phase 11 UI router. These are distinct from the Phase 1 common envelope
+models in :mod:`app.ai_service.common.schemas`.
 
-.. code-block:: json
-
-    {
-      "requestId": "9b116ef2-36ec-4429-9b0d-14f6ed8dbf37",
-      "generatedAt": "2026-07-19T16:20:00Z",
-      "success": true,
-      "error": null,
-      "data": { ... }
-    }
-
-Design notes
-------------
-* ``requestId`` always mirrors the inbound ``X-Request-ID`` header (or a
-  generated UUID4 fallback) — see :mod:`app.ai_service.common.middleware`.
-* ``generatedAt`` is always an ISO-8601 **UTC** timestamp rendered with a
-  literal ``Z`` suffix (never ``+00:00``), matching the contract example
-  in the spec (``"2026-07-19T16:20:00Z"``).
-* ``error`` is ``null`` on success and a structured
-  :class:`UIAPIErrorPayload` on failure — never a bare string. When
-  ``success`` is ``False``, ``data`` is forced to ``null`` per Section 1.1.
-* This model intentionally does **not** replace the richer, already
-  shipped :class:`app.ai_service.integration.schemas.ui_schemas.UIAPIResponse`
-  generic envelope. It is the *common, backend-typed* mirror used by the
-  Phase 1 middleware/helper layer so every submodule — including future
-  ones that never import ``ui_schemas`` — gets the exact same contract
-  guarantees. :func:`app.ai_service.common.responses.create_ui_response`
-  is the recommended way to build one; most callers never need to
-  instantiate this class directly.
+The models here include:
+- Agent chat request/response models (AgentChatRequest, AgentChatResponse, etc.)
+- AI router envelope models (AIHealthResponse, AgentAIEnvelope, etc.)
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Generic, Optional, TypeVar
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
-
-T = TypeVar("T")
-
-
-def utc_now_iso() -> str:
-    """Return the current UTC time as ``YYYY-MM-DDTHH:MM:SSZ``.
-
-    Always uses a literal ``Z`` suffix (never ``+00:00``) and truncates to
-    whole seconds so the value matches the contract example exactly, e.g.
-    ``"2026-07-19T16:20:00Z"``.
-    """
-
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
-    )
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class UIAPIErrorPayload(BaseModel):
-    """Section 1.1 ``error`` object shape.
+# ---------------------------------------------------------------------------
+# Agent Chat Models (Phase 9/10)
+# ---------------------------------------------------------------------------
+class AgentRole(str, Enum):
+    """Role of a chat message participant."""
 
-    ``{"code": "ERROR_CODE", "message": "Human readable reason"}``
-    """
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
+
+
+class AgentChatMessage(BaseModel):
+    """A single message in the agent chat conversation."""
 
     model_config = ConfigDict(extra="forbid")
 
-    code: str = Field(..., description="Machine-readable error code, e.g. 'AI_DEPENDENCY_UNAVAILABLE'.")
-    message: str = Field(..., description="Human-readable explanation safe to surface to the UI.")
-    details: Optional[Any] = Field(
-        default=None,
-        description="Optional structured details (e.g. field-level validation errors).",
-    )
+    role: AgentRole
+    content: str
 
 
-class UIAPIResponseEnvelope(BaseModel, Generic[T]):
-    """The frozen top-level ``UIAPIResponse`` envelope (Section 1.1).
+class AgentStateName(str, Enum):
+    """Semantic state names for the diagnostic agent workflow."""
 
-    Exactly these fields, no more, no less:
+    RECEIVED = "received"
+    TRIAGED = "triaged"
+    GRAPHRAG_RETRIEVED = "graphrag_retrieved"
+    DECISION_EVALUATED = "decision_evaluated"
+    FINAL = "final"
+    ERROR = "error"
 
-    * ``requestId``   (str)                    — echoes ``X-Request-ID``.
-    * ``generatedAt`` (str, ISO-8601 UTC)       — response generation time.
-    * ``success``     (bool)
-    * ``error``       (UIAPIErrorPayload | null)
-    * ``data``        (T | null)
-    """
+
+class AgentState(BaseModel):
+    """A single state transition in the diagnostic agent workflow."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: AgentStateName
+    message: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentChatRequest(BaseModel):
+    """Request to run a diagnostic agent chat turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    messages: List[AgentChatMessage]
+    stream: bool = False
+    include_graph_context: bool = True
+    include_recommendations: bool = True
+
+
+class AgentChatResponse(BaseModel):
+    """Response from a diagnostic agent chat turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    asset_id: Optional[str] = None
+    final_answer: str
+    states: List[AgentState]
+
+
+# ---------------------------------------------------------------------------
+# AI Router Envelope Models (Phase 10)
+# ---------------------------------------------------------------------------
+class AIHealthResponse(BaseModel):
+    """Health check response for the AI service."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    version: str
+    dependencies: Dict[str, Any]
+
+
+class APIResponse(BaseModel):
+    """Generic API response envelope."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    request_id: str = Field(alias="requestId")
-    generated_at: str = Field(alias="generatedAt", default_factory=utc_now_iso)
     success: bool
-    error: Optional[UIAPIErrorPayload] = None
-    data: Optional[T] = None
+    data: Optional[Any] = None
+    request_id: str = Field(alias="requestId")
+    error: Optional[Dict[str, Any]] = None
 
-    @field_serializer("generated_at")
-    def _serialize_generated_at(self, value: Any) -> str:  # noqa: D401
-        # Accept either a pre-formatted string or a datetime for convenience.
-        if isinstance(value, datetime):
-            value = value.astimezone(timezone.utc).replace(microsecond=0)
-            return value.isoformat().replace("+00:00", "Z")
-        return str(value)
+
+class GraphRagAIEnvelope(APIResponse):
+    """GraphRAG query response envelope."""
+
+    pass
+
+
+class PredictiveAIEnvelope(APIResponse):
+    """Predictive maintenance inference response envelope."""
+
+    pass
+
+
+class ExplainAIEnvelope(APIResponse):
+    """Explainability (XAI) response envelope."""
+
+    pass
+
+
+class ExplainFetchResponse(BaseModel):
+    """Explanation fetch response data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prediction_id: str
+    explanation: Any
+
+
+class RecommendAIEnvelope(APIResponse):
+    """Recommendation response envelope."""
+
+    pass
+
+
+class AgentAIEnvelope(APIResponse):
+    """Agent chat response envelope."""
+
+    pass
