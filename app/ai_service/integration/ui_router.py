@@ -21,22 +21,6 @@ Every response validates through a Phase 11 schema (see
 :mod:`app.ai_service.integration.schemas`) so any drift between the
 backend shape and the front-end expectation surfaces as a 500 in CI
 instead of a silently malformed payload in production.
-
-Phase 1 — Common Infrastructure & Response Contract
-----------------------------------------------------
-This router is wired against the shared Phase 1 envelope/middleware layer
-in :mod:`app.ai_service.common`:
-
-* ``route_class=make_ui_contract_route(module="phase-11-ui")`` guarantees
-  every route on this router echoes ``x-request-id`` and sets
-  ``x-ai-module: phase-11-ui`` on its response — even for hand-rolled
-  ``StreamingResponse``/``JSONResponse`` objects that forget to set the
-  headers themselves.
-* ``_ui_response`` (kept for call-site compatibility with the rest of
-  this module) now delegates to
-  :func:`app.ai_service.common.responses.create_ui_response`, which
-  builds the frozen ``UIAPIResponse`` envelope and sanitises any
-  ``None``-valued array field to ``[]`` before it ever reaches the wire.
 """
 from __future__ import annotations
 
@@ -47,13 +31,6 @@ from typing import Annotated, Any, AsyncIterator, Dict, List, Optional
 from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.ai_service.common import (
-    AI_MODULE_HEADER,
-    REQUEST_ID_HEADER,
-    create_ui_response,
-    get_request_id,
-    make_ui_contract_route,
-)
 from app.ai_service.integration.adapters.chat_event_adapter import (
     to_chat_event_stream,
     to_ui_chat_message,
@@ -65,12 +42,8 @@ from app.ai_service.integration.adapters.frontend_adapters import (
     adapt_inference_to_prediction,
     adapt_recommendations_to_actions,
     build_telemetry_chart_series,
+    to_ui_api_envelope,
 )
-# Note: `to_ui_api_envelope` (legacy Phase 11 envelope builder) is no longer
-# imported here — `_ui_response()` below now delegates to the Phase 1 shared
-# helper `app.ai_service.common.create_ui_response`, which supersedes it for
-# every route on this router. `to_ui_api_envelope` itself is untouched and
-# still exported from `frontend_adapters` for any other existing caller.
 from app.ai_service.integration.cors_headers import (
     build_ui_preflight_headers,
     safe_cors_origin,
@@ -89,6 +62,12 @@ from app.ai_service.integration.formatters.payload_formatters import (
     format_subgraph_update_packet,
     format_time_series_points,
     format_vis_network_elements,
+)
+from app.ai_service.integration.response_shaping import (
+    SUPPORTED_EXPLAIN_METHODS,
+    UnsupportedExplainMethodError,
+    resolve_explain_method,
+    sanitize_arrays,
 )
 from app.ai_service.integration.schemas.ui_schemas import (
     UIAPIResponse,
@@ -123,11 +102,6 @@ def _get_cors_origins() -> List[str]:
 
 
 
-#: Submodule identifier declared on every response's ``x-ai-module`` header
-#: (Section 1.2). Kept as a module-level constant so both the Phase 1
-#: ``route_class`` safety net and the ``_ui_response`` helper below agree.
-AI_MODULE_NAME = "phase-11-ui"
-
 ui_router = APIRouter(
     prefix="/ui",
     tags=["AI Platform — UI Contracts (Phase 11)"],
@@ -136,11 +110,6 @@ ui_router = APIRouter(
         422: {"description": "Pydantic validation error — see details for the offending field."},
         503: {"description": "AI dependency temporarily unavailable."},
     },
-    # Phase 1 — Common Infrastructure & Response Contract (Section 2.1/3.2):
-    # router-wide interception that guarantees x-request-id echo + x-ai-module
-    # injection on every route mounted here, independent of what each handler
-    # does internally.
-    route_class=make_ui_contract_route(module=AI_MODULE_NAME),
 )
 
 
@@ -183,17 +152,11 @@ class _LazyEngineDep(FastAPIDepends):
 # Helpers
 # ---------------------------------------------------------------------------
 def _request_id(request: Request) -> str:
-    """Resolve the tracking id for this request.
-
-    Phase 1: delegates to :func:`app.ai_service.common.get_request_id`,
-    which prefers the id already resolved by ``UIContractRoute`` for this
-    request (``request.state.request_id``) so the exact same id is used
-    end-to-end, and otherwise falls back to reading ``X-Request-ID`` /
-    ``X-Correlation-ID`` / generating a UUID4, unchanged from the original
-    Phase 11 behaviour.
-    """
-
-    return get_request_id(request)
+    return (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or str(uuid.uuid4())
+    )
 
 
 def _ui_response(
@@ -202,27 +165,30 @@ def _ui_response(
     request_id: str,
     success: bool = True,
     error: Optional[Dict[str, Any]] = None,
+    http_status: Optional[int] = None,
 ) -> JSONResponse:
     """Wrap a payload in the Section 11 ``UIAPIResponse`` envelope.
 
     Always returns a ``UIAPIResponse``-shaped dict, even on errors, so
     the front-end can rely on a single parsing path.
 
-    Phase 1: this now delegates to the shared
-    :func:`app.ai_service.common.responses.create_ui_response` helper so
-    every ``/api/v1/ai/ui/*`` handler gets the exact same envelope shape,
-    header contract, and "no null arrays" sanitation guarantees as any
-    other AI UI submodule that adopts the Phase 1 helper directly. The
-    call signature here is unchanged so no call sites in this file needed
-    to be rewritten beyond this one function body.
+    Phase 2 — ``http_status`` lets a handler pick a specific non-200 code
+    (e.g. **400** for a client-side validation error such as an
+    unsupported explainability ``method``) while keeping the envelope
+    shape identical; engine failures still default to 503.
     """
 
-    return create_ui_response(
-        data=data,
-        request_id=request_id,
-        success=success,
-        error=error,
-        module=AI_MODULE_NAME,
+    body = to_ui_api_envelope(
+        success=success, data=data, request_id=request_id, error=error
+    )
+    if success:
+        status_code = status.HTTP_200_OK
+    else:
+        status_code = http_status or status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(
+        status_code=status_code,
+        content=body,
+        headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
     )
 
 
@@ -286,6 +252,12 @@ async def digital_twin(
         payload = adapt_digital_twin_payload(
             asset=asset, inference=inference, history=history_frames
         )
+        # Phase 2 — response-shaping isolation: the top-level ``riskScore``
+        # is now attached by the adapter (computed from the inference
+        # failure probability, safely defaulted otherwise). Run the
+        # explicit array sanitizer here as a final guarantee that no
+        # list attribute ever serializes as null.
+        payload = sanitize_arrays(payload)
         # Validate the response through the strict Pydantic model
         # so any drift surfaces as a 500 in CI.
         from app.ai_service.integration.schemas.ui_schemas import UIDigitalTwinPayload
@@ -330,6 +302,9 @@ async def graphrag_query(
             top_k=int(body.get("top_k", 8)),
         )
         response = await graphrag_engine.query(req)
+        # Phase 2 — the adapter now appends structured execution logs,
+        # aligns node ids/labels/relation names to the frontend vocabulary,
+        # and strictly validates node types against the panel ontology.
         payload = adapt_graphrag_payload(response, query=req.query_text)
         # Augment with chart-ready extras
         from app.ai_service.integration.formatters.confidence_badge import confidence_to_badge
@@ -337,6 +312,8 @@ async def graphrag_query(
         payload["badge"] = confidence_to_badge(payload["confidence"]).value
         payload["warningLevel"] = confidence_to_warning_level(payload["confidence"])
         payload["color"] = confidence_to_color(payload["confidence"])
+        # Phase 2 — strict non-null array protection prior to serialization.
+        payload = sanitize_arrays(payload)
         UIGraphRAGPayload.model_validate(payload)
         return _ui_response(data=payload, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
@@ -367,10 +344,52 @@ async def explain(
     prediction_id: Annotated[str, Path(min_length=1)],
     request: Request,
     asset_id: Annotated[str, Query(min_length=1)] = "P-101A",
-    method: Annotated[str, Query(pattern="^(SHAP|LIME|INTEGRATED_GRADIENTS|PERMUTATION)$")] = "SHAP",
+    method: Annotated[
+        str,
+        Query(
+            description=(
+                "Explainability method. Case-insensitive; accepts shap, lime, "
+                "integrated_gradients (ig), permutation. Unsupported values "
+                "return a clear HTTP 400 validation error."
+            )
+        ),
+    ] = "SHAP",
     xai_engine: Any = _LazyEngineDep("get_xai_engine"),
 ) -> JSONResponse:
     request_id = _request_id(request)
+    # ------------------------------------------------------------------
+    # Phase 2 — strictly honor the ``method`` query parameter.
+    # Case-insensitive + alias-aware (?method=shap, ?method=lime,
+    # ?method=integrated_gradients all resolve). Anything unsupported is a
+    # client error → HTTP 400 in the UIAPIResponse envelope, never a 422
+    # or a silent fallback to SHAP.
+    # ------------------------------------------------------------------
+    try:
+        resolved_method = resolve_explain_method(method)
+    except UnsupportedExplainMethodError as exc:
+        return _ui_response(
+            data={
+                "predictionId": prediction_id,
+                "assetId": asset_id,
+                "baseValue": 0.0,
+                "predictionValue": 0.0,
+                "features": [],
+                "confidenceMatrix": [],
+                "rootCause": {},
+            },
+            request_id=request_id,
+            success=False,
+            error={
+                "code": "XAI_UNSUPPORTED_METHOD",
+                "message": str(exc),
+                "details": {
+                    "method": method,
+                    "supported": list(SUPPORTED_EXPLAIN_METHODS),
+                    "acceptedAliases": ["shap", "lime", "integrated_gradients", "ig", "permutation"],
+                },
+            },
+            http_status=status.HTTP_400_BAD_REQUEST,
+        )
     try:
         from app.models.xai import ExplanationMethod, ExplanationRequest, ExplanationScope
 
@@ -381,13 +400,18 @@ async def explain(
             ExplanationRequest(
                 asset_id=asset_id,
                 explanation_id=prediction_id,
-                method=ExplanationMethod(method),
+                method=ExplanationMethod(resolved_method),
                 scope=ExplanationScope.LOCAL,
             ),
             history,
         )
+        # requested_method tailors the structural payload (feature
+        # descriptors, method echo) to the requested explainability method.
         payload = adapt_explainability_payload(
-            explanation=explanation, prediction_id=prediction_id, asset_id=asset_id
+            explanation=explanation,
+            prediction_id=prediction_id,
+            asset_id=asset_id,
+            requested_method=resolved_method,
         )
         payload["waterfall"] = format_shap_waterfall(
             payload["features"], base_value=payload["baseValue"]
@@ -397,6 +421,8 @@ async def explain(
             base_value=payload["baseValue"],
             prediction_value=payload["predictionValue"],
         )
+        # Phase 2 — strict non-null array protection prior to serialization.
+        payload = sanitize_arrays(payload)
         UIShapExplanation.model_validate(payload)
         return _ui_response(data=payload, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
