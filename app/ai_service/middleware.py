@@ -44,6 +44,7 @@ import uuid
 from typing import Callable, Optional, Type
 
 from fastapi import Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 
 logger = logging.getLogger(__name__)
@@ -145,7 +146,41 @@ class UIContractRoute(APIRoute):
             # Expose to downstream handlers / dependencies / response helpers.
             request.state.request_id = request_id
 
-            response = await original_route_handler(request)
+            try:
+                response = await original_route_handler(request)
+            except RequestValidationError as exc:
+                # Route-level wrapping sees validation failures before the
+                # application-level exception handler. Preserve their 422
+                # semantics while returning the same UI envelope.
+                from app.ai_service.responses import create_ui_response
+                response = create_ui_response(
+                    request_id=request_id,
+                    success=False,
+                    error={
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request validation failed. Check payload shape, field types, and allowed values.",
+                        "details": exc.errors(),
+                    },
+                    module=self.default_module,
+                    status_code=422,
+                )
+            except Exception:  # noqa: BLE001
+                # Dependency resolution runs before a handler body and can
+                # therefore fail outside a route's own try/except.  Keep the
+                # UI boundary deterministic even in that case.
+                logger.exception("Unhandled UI route exception path=%s", request.url.path)
+                from app.ai_service.responses import create_ui_response
+                response = create_ui_response(
+                    request_id=request_id,
+                    success=False,
+                    error={
+                        "code": "INTERNAL_SERVER_ERROR",
+                        "message": "An unexpected UI service error occurred.",
+                        "details": None,
+                    },
+                    module=self.default_module,
+                    status_code=500,
+                )
 
             # Belt & suspenders: guarantee the contract headers exist even
             # if the handler built its own Response/StreamingResponse and

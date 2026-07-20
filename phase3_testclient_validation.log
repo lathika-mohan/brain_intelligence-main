@@ -1,0 +1,76 @@
+xai router import failed: No module named 'shap'
+vector_search router not mounted: No module named 'qdrant_client'
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in RulEstimate has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in RulEstimate has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in FailureProbability has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in FailureProbability has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+decision router not mounted: No module named 'xgboost'
+PHASE0 FLAGGED SHIM: Auth router mounted at /auth — OWNERSHIP: Gateway Member 2, to be removed in Phase 0.5
+PHASE0 FLAGGED SHIM: Dashboard router mounted at /dashboard — OWNERSHIP: Gateway Member 2
+PHASE0 FLAGGED SHIM: Assets router mounted at /assets — OWNERSHIP: Gateway Member 2
+PHASE0 FLAGGED SHIM: Alerts router mounted at /alerts — OWNERSHIP: Gateway Member 2
+PHASE0 FLAGGED SHIM: Test inject router mounted at /test — OWNERSHIP: Gateway Member 2
+INFO:app.main:Dev CORS origins (includes frontend for standalone testing): ['http://localhost:3000']
+INFO:app.api.middleware.internal_only_guard:InternalOnlyGuardMiddleware initialized — env=development, token_set=True
+WARNING:app.api.middleware.internal_only_guard:Internal-only guard BYPASSED in development for path /api/v1/ai/ui/dashboard. In production this would be 403. Frontend should NEVER call AI direct — must go via Gateway.
+INFO:httpx:HTTP Request: GET http://testserver/api/v1/ai/ui/dashboard "HTTP/1.1 404 Not Found"
+WARNING:app.api.middleware.internal_only_guard:Internal-only guard BYPASSED in development for path /api/v1/ai/ui/contracts. In production this would be 403. Frontend should NEVER call AI direct — must go via Gateway.
+INFO:httpx:HTTP Request: GET http://testserver/api/v1/ai/ui/contracts "HTTP/1.1 200 OK"
+WARNING:app.api.middleware.internal_only_guard:Internal-only guard BYPASSED in development for path /api/v1/ai/ui/recommendations. In production this would be 403. Frontend should NEVER call AI direct — must go via Gateway.
+INFO:httpx:HTTP Request: POST http://testserver/api/v1/ai/ui/recommendations "HTTP/1.1 422 Unprocessable Entity"
+WARNING:app.api.middleware.internal_only_guard:Internal-only guard BYPASSED in development for path /api/v1/ai/ui/recommendations. In production this would be 403. Frontend should NEVER call AI direct — must go via Gateway.
+ERROR:app.ai_service.middleware:Unhandled UI route exception path=/api/v1/ai/ui/recommendations
+Traceback (most recent call last):
+  File "/home/user/brain_intelligence-main/app/ai_service/middleware.py", line 150, in custom_route_handler
+    response = await original_route_handler(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/fastapi/routing.py", line 291, in app
+    solved_result = await solve_dependencies(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/usr/local/lib/python3.13/site-packages/fastapi/dependencies/utils.py", line 630, in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/starlette/concurrency.py", line 39, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/anyio/to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/local/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 2592, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 1029, in run
+    result = context.run(func, *args)
+  File "/home/user/brain_intelligence-main/app/ai_service/dependencies.py", line 59, in get_decision_engine
+    from app.decision.decision_service import get_decision_service
+  File "/home/user/brain_intelligence-main/app/decision/__init__.py", line 32, in <module>
+    from app.decision.decision_service import DecisionService, get_decision_service
+  File "/home/user/brain_intelligence-main/app/decision/decision_service.py", line 53, in <module>
+    from app.predictive.prediction_service import PredictionServiceUnavailable, get_prediction_service
+  File "/home/user/brain_intelligence-main/app/predictive/prediction_service.py", line 51, in <module>
+    from app.predictive.model_registry import ModelRegistry, get_model_registry
+  File "/home/user/brain_intelligence-main/app/predictive/model_registry.py", line 28, in <module>
+    import xgboost as xgb
+ModuleNotFoundError: No module named 'xgboost'
+INFO:httpx:HTTP Request: POST http://testserver/api/v1/ai/ui/recommendations "HTTP/1.1 500 Internal Server Error"
+ALL INFRASTRUCTURE VALIDATION CHECKS PASSED!
+dashboard 404, contracts 200, validation 422, unhandled dependency 500, array sanitation: passed

@@ -35,6 +35,8 @@ from typing import Annotated, Any, AsyncIterator, Dict, List, Optional
 from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.ai_service.middleware import get_request_id, make_ui_contract_route
+from app.ai_service.responses import create_ui_response
 from app.ai_service.integration.adapters.chat_event_adapter import (
     to_chat_event_stream,
     to_ui_chat_message,
@@ -44,7 +46,6 @@ from app.ai_service.integration.adapters.frontend_adapters import (
     adapt_explainability_payload,
     adapt_graphrag_payload,
     adapt_recommendations_to_actions,
-    to_ui_api_envelope,
 )
 from app.ai_service.integration.cors_headers import (
     build_ui_preflight_headers,
@@ -96,6 +97,7 @@ def _get_cors_origins() -> List[str]:
 ui_router = APIRouter(
     prefix="/ui",
     tags=["AI Platform — UI Contracts (Phase 11)"],
+    route_class=make_ui_contract_route(module="phase-11-ui"),
     responses={
         200: {"description": "UI-shaped payload (Section 11 strict contract)."},
         422: {"description": "Pydantic validation error — see details for the offending field."},
@@ -139,27 +141,26 @@ class _LazyEngineDep(FastAPIDepends):
 # Helpers
 # ---------------------------------------------------------------------------
 def _request_id(request: Request) -> str:
-    return (
-        request.headers.get("x-request-id")
-        or request.headers.get("x-correlation-id")
-        or str(uuid.uuid4())
-    )
+    """Use the request id resolved once by the UI contract route."""
+    return get_request_id(request)
 
 
 def _ui_response(
     *,
-    data: Any,
+    data: Any = None,
     request_id: str,
     success: bool = True,
     error: Optional[Dict[str, Any]] = None,
+    status_code: Optional[int] = None,
 ) -> JSONResponse:
-    body = to_ui_api_envelope(
-        success=success, data=data, request_id=request_id, error=error
-    )
-    return JSONResponse(
-        status_code=status.HTTP_200_OK if success else status.HTTP_503_SERVICE_UNAVAILABLE,
-        content=body,
-        headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
+    """Return the sole UI JSON response format via the shared helper."""
+    return create_ui_response(
+        data=data,
+        request_id=request_id,
+        success=success,
+        error=error,
+        module="phase-11-ui",
+        status_code=status_code,
     )
 
 
@@ -587,7 +588,7 @@ async def agent_chat_stream(
             error_iter(),
             media_type="application/x-ndjson",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            headers={"x-request-id": request_id},
+            headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
         )
 
 
@@ -656,6 +657,7 @@ async def preflight(request: Request) -> JSONResponse:
     origin = safe_cors_origin(request_origin, _get_cors_origins())
     headers = build_ui_preflight_headers(origin=origin)
     headers["x-request-id"] = request_id
+    headers["x-ai-module"] = "phase-11-ui"
     headers.pop("Vary", None)
     headers.pop("vary", None)
     return JSONResponse(status_code=204, content=None, headers=headers)

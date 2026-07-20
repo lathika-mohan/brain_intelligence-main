@@ -34,6 +34,13 @@ from app.ai_service.integration.schemas.ui_schemas import (
     UITelemetry,
 )
 
+from app.ai_service.integration.schemas.ui_request_schemas import (
+    UIAgentChatRequest,
+    UIAgentChatStreamRequest,
+    UIGraphRAGQueryRequest,
+    UIRecommendationRequest,
+)
+
 __all__ = [
     "UIAlert",
     "UIAPIResponse",
@@ -56,4 +63,8 @@ __all__ = [
     "StreamEventType",
     "SubgraphUpdatePacket",
     "ToolExecutionEvent",
+    "UIGraphRAGQueryRequest",
+    "UIRecommendationRequest",
+    "UIAgentChatRequest",
+    "UIAgentChatStreamRequest",
 ]

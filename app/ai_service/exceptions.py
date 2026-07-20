@@ -1,4 +1,4 @@
-"""Phase 10 standardized AI API exceptions and FastAPI handlers."""
+"""Standardized exception handlers for the AI service and UI contract."""
 from __future__ import annotations
 
 import logging
@@ -11,120 +11,70 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-logger = logging.getLogger(__name__)
+from app.ai_service.middleware import get_request_id
+from app.ai_service.responses import create_ui_response
 
+logger = logging.getLogger(__name__)
+UI_PREFIX = "/api/v1/ai/ui/"
 
 class ErrorEnvelope(BaseModel):
-    """Sanitized error payload returned by the AI network boundary."""
-
     model_config = ConfigDict(extra="forbid")
-
     success: bool = False
-    error_code: str = Field(..., examples=["AI_DEPENDENCY_UNAVAILABLE"])
-    message: str = Field(..., examples=["The requested AI dependency is temporarily unavailable."])
-    request_id: str = Field(..., examples=["9b116ef2-36ec-4429-9b0d-14f6ed8dbf37"])
+    error_code: str = Field(...)
+    message: str = Field(...)
+    request_id: str = Field(...)
     details: Optional[Any] = None
 
-
 class AIServiceError(RuntimeError):
-    """Base class for sanitized service errors raised inside Phase 10 routers."""
-
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     error_code = "AI_SERVICE_ERROR"
     public_message = "The AI service is temporarily unavailable."
-
     def __init__(self, message: str | None = None, *, details: Any = None) -> None:
         super().__init__(message or self.public_message)
-        self.message = message or self.public_message
-        self.details = details
-
+        self.message, self.details = message or self.public_message, details
 
 class AIDependencyUnavailable(AIServiceError):
-    """Raised when Neo4j, Qdrant, model artifacts, or an LLM runtime cannot be reached."""
-
-    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    error_code = "AI_DEPENDENCY_UNAVAILABLE"
-    public_message = "A required AI dependency is temporarily unavailable."
-
-
+    status_code, error_code, public_message = 503, "AI_DEPENDENCY_UNAVAILABLE", "A required AI dependency is temporarily unavailable."
 class AIInvalidRequest(AIServiceError):
-    """Raised when semantic validation fails after Pydantic parsing succeeds."""
-
-    status_code = 422
-    error_code = "AI_INVALID_REQUEST"
-    public_message = "The AI request is invalid for this operation."
-
-
+    status_code, error_code, public_message = 422, "AI_INVALID_REQUEST", "The AI request is invalid for this operation."
 class AIEngineTimeout(AIServiceError):
-    """Raised when an LLM, vector search, graph query, or ML operation exceeds its deadline."""
-
-    status_code = status.HTTP_504_GATEWAY_TIMEOUT
-    error_code = "AI_ENGINE_TIMEOUT"
-    public_message = "The AI engine timed out while processing the request."
-
+    status_code, error_code, public_message = 504, "AI_ENGINE_TIMEOUT", "The AI engine timed out while processing the request."
 
 def _request_id(request: Request) -> str:
-    return request.headers.get("x-request-id") or str(uuid.uuid4())
-
-
-def _response(status_code: int, payload: ErrorEnvelope):
+    return get_request_id(request)
+def _is_ui(request: Request) -> bool:
+    return request.url.path.startswith(UI_PREFIX)
+def _response(status_code: int, payload: ErrorEnvelope) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=payload.model_dump(mode="json"))
-
+def _ui_error(request: Request, status_code: int, code: str, message: str, details: Any = None) -> JSONResponse:
+    return create_ui_response(request_id=_request_id(request), success=False,
+        error={"code": code, "message": message, "details": details},
+        module="phase-11-ui", status_code=status_code)
 
 async def ai_service_exception_handler(request: Request, exc: AIServiceError):
-    request_id = _request_id(request)
-    logger.warning(
-        "AI service exception [%s] request_id=%s path=%s message=%s",
-        exc.error_code,
-        request_id,
-        request.url.path,
-        exc.message,
-    )
-    return _response(
-        exc.status_code,
-        ErrorEnvelope(
-            error_code=exc.error_code,
-            message=exc.public_message,
-            request_id=request_id,
-            details=exc.details,
-        ),
-    )
-
+    if _is_ui(request):
+        return _ui_error(request, exc.status_code, exc.error_code, exc.public_message, exc.details)
+    return _response(exc.status_code, ErrorEnvelope(error_code=exc.error_code, message=exc.public_message, request_id=_request_id(request), details=exc.details))
 
 async def ai_http_exception_handler(request: Request, exc: StarletteHTTPException):
-    request_id = _request_id(request)
-    logger.info("HTTP exception request_id=%s path=%s status=%s", request_id, request.url.path, exc.status_code)
-    return _response(
-        exc.status_code,
-        ErrorEnvelope(
-            error_code="HTTP_ERROR",
-            message=str(exc.detail),
-            request_id=request_id,
-        ),
-    )
-
+    if _is_ui(request):
+        return _ui_error(request, exc.status_code, "HTTP_ERROR", str(exc.detail))
+    return _response(exc.status_code, ErrorEnvelope(error_code="HTTP_ERROR", message=str(exc.detail), request_id=_request_id(request)))
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    request_id = _request_id(request)
-    logger.warning("Request validation failed request_id=%s path=%s errors=%s", request_id, request.url.path, exc.errors())
-    return _response(
-        422,
-        ErrorEnvelope(
-            error_code="VALIDATION_ERROR",
-            message="Request validation failed. Check payload shape, field types, and allowed values.",
-            request_id=request_id,
-            details=exc.errors(),
-        ),
-    )
+    details = exc.errors()
+    if _is_ui(request):
+        return _ui_error(request, 422, "VALIDATION_ERROR", "Request validation failed. Check payload shape, field types, and allowed values.", details)
+    return _response(422, ErrorEnvelope(error_code="VALIDATION_ERROR", message="Request validation failed. Check payload shape, field types, and allowed values.", request_id=_request_id(request), details=details))
 
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception path=%s", request.url.path, exc_info=exc)
+    if _is_ui(request):
+        return _ui_error(request, 500, "INTERNAL_SERVER_ERROR", "An unexpected UI service error occurred.")
+    return _response(500, ErrorEnvelope(error_code="INTERNAL_SERVER_ERROR", message="An unexpected service error occurred.", request_id=_request_id(request)))
 
 def install_ai_exception_handlers(app: FastAPI) -> None:
-    """Install sanitized exception handlers on a FastAPI application.
-
-    Member 1 should call this when mounting the router into the enterprise
-    gateway so internal Cypher queries, embedding/runtime paths, or LLM details
-    are not leaked to clients.
-    """
-
     app.add_exception_handler(AIServiceError, ai_service_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, ai_http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
