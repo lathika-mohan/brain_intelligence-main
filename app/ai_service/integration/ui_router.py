@@ -437,6 +437,40 @@ async def agent_chat(
         from app.ai_service.agent_runtime import run_agent_chat
 
         messages_raw = body.get("messages", [])
+        
+        # Validation of empty, blank, or whitespace-only message
+        is_empty = False
+        if not messages_raw:
+            is_empty = True
+        else:
+            user_contents = [
+                str(m.get("content") or "").strip()
+                for m in messages_raw
+                if str(m.get("role", "")).lower() == "user"
+            ]
+            if not user_contents:
+                user_contents = [str(m.get("content") or "").strip() for m in messages_raw]
+            
+            if not user_contents or any(not content for content in user_contents):
+                is_empty = True
+
+        if is_empty:
+            body_envelope = to_ui_api_envelope(
+                success=False,
+                data={},
+                request_id=request_id,
+                error={
+                    "code": "INVALID_INPUT",
+                    "message": "Message text cannot be empty, blank, or whitespace-only.",
+                    "details": {"field": "messages"},
+                }
+            )
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=body_envelope,
+                headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
+            )
+
         messages = [
             AgentChatMessage(
                 role=AgentRole(str(m.get("role", "user")).lower()),
@@ -445,19 +479,14 @@ async def agent_chat(
             for m in messages_raw
             if m.get("content")
         ]
-        if not messages:
-            return _ui_response(
-                data={},
-                request_id=request_id,
-                success=False,
-                error={
-                    "code": "INVALID_REQUEST",
-                    "message": "At least one message is required.",
-                    "details": {"field": "messages"},
-                },
-            )
+
+        # Session support: read and persist sessionId from request body
+        session_id = body.get("sessionId") or body.get("session_id")
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
         req = AgentChatRequest(
-            session_id=body.get("session_id"),
+            session_id=session_id,
             asset_id=body.get("asset_id"),
             messages=messages,
             stream=False,
@@ -465,8 +494,17 @@ async def agent_chat(
             include_recommendations=bool(body.get("include_recommendations", True)),
         )
         response = await run_agent_chat(req)
+        
+        # AI Reply Shaping format (combines original Section 11 UIChat and the new spec)
         chat = to_ui_chat_message(response)
+        chat["sessionId"] = session_id
+        chat["messageId"] = chat.get("messageId") or f"msg-{session_id}"
+        chat["reply"] = response.final_answer or ""
+        chat["payload"] = response.final_answer or ""
+        chat["timestamp"] = chat.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        chat["suggestedActions"] = [] # default to [] if empty; never None!
         chat["states"] = [s.model_dump(mode="json") for s in response.states]
+        
         return _ui_response(data=chat, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("agent_chat failed")
@@ -514,8 +552,14 @@ async def agent_chat_stream(
             for m in messages_raw
             if m.get("content")
         ]
+
+        # Session support: read and persist sessionId from request body
+        session_id = body.get("sessionId") or body.get("session_id")
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
         req = AgentChatRequest(
-            session_id=body.get("session_id"),
+            session_id=session_id,
             asset_id=body.get("asset_id"),
             messages=messages,
             stream=True,
@@ -525,11 +569,29 @@ async def agent_chat_stream(
         response = await run_agent_chat(req)
 
         async def event_iter() -> AsyncIterator[bytes]:
+            seq_num = 1
             async for block in to_chat_event_stream(
                 response.states, session_id=response.session_id, asset_id=response.asset_id
             ):
                 import json as _json
 
+                # Required camelCase fields and sequence starting at 1
+                block["seq"] = seq_num
+                
+                # Map event types to Phase 3 spec types (start, delta, done, ping)
+                event_type = block.get("eventType")
+                if event_type == "heartbeat":
+                    block["type"] = "ping"
+                elif seq_num == 2 or (seq_num == 1 and event_type != "heartbeat"):
+                    block["type"] = "start"
+                elif block.get("isFinal") or event_type == "final":
+                    block["type"] = "done"
+                    block["metadata"] = block.get("payload") or {}
+                else:
+                    block["type"] = "delta"
+                    block["content"] = block.get("message") or ""
+
+                seq_num += 1
                 yield (_json.dumps(block, default=str) + "\n").encode("utf-8")
 
         return StreamingResponse(

@@ -231,13 +231,26 @@ class UIDigitalTwinPayload(BaseModel):
     * ``currentAsset.history``         — chronological frames for mini charts
     * ``currentAsset.id``              — for branch-specific SVG schematics
     * ``currentAsset.status``          — top status pill
+    * ``riskScore``                    — **Phase 2**: top-level AI Risk Index
+      (0..100 float), always populated; mirrors the telemetry card when the
+      predictive engine ran, and safely defaults to ``0.0`` otherwise.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     asset: UIAsset
     telemetry: UITelemetry
     history: List[UIHistoryFrame] = Field(default_factory=list)
+    riskScore: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=100.0,
+        description=(
+            "Phase 2 — top-level AI Risk Index (0..100). Never null; "
+            "computed from the inference failure probability when available "
+            "and safely defaulted otherwise."
+        ),
+    )
     activeAnomaly: Optional[str] = Field(
         default=None,
         description=(
@@ -246,7 +259,10 @@ class UIDigitalTwinPayload(BaseModel):
             "'leakage'). DigitalTwinView branches on this string."
         ),
     )
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        alias="generatedAt",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +332,61 @@ class UIGraphRAGPayload(BaseModel):
 # ---------------------------------------------------------------------------
 # ShapExplainability.tsx contract
 # ---------------------------------------------------------------------------
+class UIWaterfallStep(BaseModel):
+    """One stepwise feature contribution inside the SHAP waterfall chart.
+
+    Phase 2 — the waterfall is an explicit typed structure (not a loose
+    dict) so any drift in the stepwise-contribution shape fails fast in CI.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    feature: str
+    value: str = ""
+    delta: float
+    start: float
+    end: float
+    cumulative: float
+    direction: str = Field(default="positive", description="'positive' | 'negative'")
+
+
+class UIWaterfall(BaseModel):
+    """Phase 2 — explicit waterfall payload (base value + ordered steps)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    baseValue: float
+    finalValue: float
+    bars: List[UIWaterfallStep] = Field(default_factory=list)
+
+
+class UIForceContribution(BaseModel):
+    """One pushing force (feature mapping) inside the force plot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feature: str
+    value: str = ""
+    weight: float = Field(ge=0.0, description="|shapValue| — arrow length.")
+    direction: str = Field(default="positive", description="'positive' | 'negative'")
+
+
+class UIForcePlot(BaseModel):
+    """Phase 2 — explicit force-plot payload.
+
+    ``baseValue`` anchors the plot, ``predictionValue`` is the final model
+    output, and the ``positive`` / ``negative`` stacks hold the feature
+    mappings pushing the prediction up or down.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    baseValue: float
+    predictionValue: float
+    positive: List[UIForceContribution] = Field(default_factory=list)
+    negative: List[UIForceContribution] = Field(default_factory=list)
+
+
 class UIShapFeature(BaseModel):
     """ShapExplainability's ``SHAPFeature`` shape.
 
@@ -352,8 +423,14 @@ class UIShapExplanation(BaseModel):
         default_factory=dict,
         description="Headline + narrative + contributing failure modes (as dict for flexibility).",
     )
-    waterfall: Optional[Dict[str, Any]] = None
-    forcePlot: Optional[Dict[str, Any]] = None
+    waterfall: Optional[UIWaterfall] = Field(
+        default=None,
+        description="Phase 2 — explicit stepwise feature-contribution waterfall.",
+    )
+    forcePlot: Optional[UIForcePlot] = Field(
+        default=None,
+        description="Phase 2 — explicit force plot (baseValue, pushing forces, feature mappings).",
+    )
     generatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -385,7 +462,7 @@ class UISopLinkage(BaseModel):
 class UIRecommendationAction(BaseModel):
     """Single action card on the prescriptive-action panel."""
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     actionId: str
     actionType: str
@@ -397,13 +474,6 @@ class UIRecommendationAction(BaseModel):
     recommendedCompletionBy: str
     sop: Optional[UISopLinkage] = None
     rank: int = Field(default=1, ge=1)
-
-    # Phase 3 compatibility fields
-    actionCardId: Optional[str] = None
-    title: Optional[str] = None
-    costAvoidance: Optional[float] = None
-    riskScore: Optional[float] = None
-    completionDate: Optional[str] = None
 
 
 # Resolve forward references for the generic envelope

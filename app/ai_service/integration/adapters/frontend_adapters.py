@@ -709,22 +709,30 @@ def adapt_recommendations_to_actions(response: Any) -> List[Dict[str, Any]]:
             str(getattr(rec, "severity_tier", "MONITOR")).upper(), UISeverityTier.MONITOR
         )
 
+        action_id_val = str(getattr(rec, "action_id", uuid.uuid4().hex[:10]))
+        action_type_val = str(getattr(rec, "action_type", "INSPECT"))
+        risk_score_val = float(getattr(rec, "risk_score_if_ignored", 0.0) or 0.0)
+        cost_avoidance_val = float(getattr(rec, "estimated_cost_avoidance_usd", 0.0) or 0.0)
+
         actions.append(
             UIRecommendationAction(
-                actionId=str(getattr(rec, "action_id", uuid.uuid4().hex[:10])),
-                actionType=str(getattr(rec, "action_type", "INSPECT")),
+                actionId=action_id_val,
+                actionType=action_type_val,
                 description=str(getattr(rec, "description", "")),
                 priority=priority,
                 severityTier=tier,
-                riskScoreIfIgnored=float(
-                    getattr(rec, "risk_score_if_ignored", 0.0) or 0.0
-                ),
-                estimatedCostAvoidanceUsd=float(
-                    getattr(rec, "estimated_cost_avoidance_usd", 0.0) or 0.0
-                ),
+                riskScoreIfIgnored=risk_score_val,
+                estimatedCostAvoidanceUsd=cost_avoidance_val,
                 recommendedCompletionBy=completion_str,
                 sop=sop,
                 rank=int(getattr(rec, "rank", 1) or 1),
+                
+                # Phase 3 compatibility fields
+                actionCardId=action_id_val,
+                title=f"{action_type_val.title()} Recommendation" if action_type_val else "Recommendation",
+                costAvoidance=cost_avoidance_val,
+                riskScore=risk_score_val,
+                completionDate=completion_str,
             ).model_dump(mode="json")
         )
     return actions

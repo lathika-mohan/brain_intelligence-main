@@ -1,0 +1,69 @@
+================================================================
+ PHASE 2 — EXISTING ENDPOINT CONTRACT CORRECTIONS
+ AUTOMATED VERIFICATION REPORT (raw terminal log)
+ Command:  pytest tests/test_phase11_ui_router_contract.py -v
+ Date:     2026-07-20 04:47:30 UTC
+ Repo:     brain_intelligence-main (Phase 2 contract corrections)
+================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/user/brain_intelligence-main
+configfile: pyproject.toml
+plugins: anyio-4.14.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 41 items
+
+tests/test_phase11_ui_router_contract.py::TestDigitalTwinContract::test_returns_envelope PASSED [  2%]
+tests/test_phase11_ui_router_contract.py::TestDigitalTwinContract::test_data_matches_panel_shape PASSED [  4%]
+tests/test_phase11_ui_router_contract.py::TestDigitalTwinContract::test_no_null_arrays PASSED [  7%]
+tests/test_phase11_ui_router_contract.py::TestDigitalTwinContract::test_horizon_query_param_honoured PASSED [  9%]
+tests/test_phase11_ui_router_contract.py::TestGraphRagContract::test_returns_envelope PASSED [ 12%]
+tests/test_phase11_ui_router_contract.py::TestGraphRagContract::test_data_matches_panel_shape PASSED [ 14%]
+tests/test_phase11_ui_router_contract.py::TestGraphRagContract::test_node_types_in_panel_vocabulary PASSED [ 17%]
+tests/test_phase11_ui_router_contract.py::TestGraphRagContract::test_missing_query_field_handled PASSED [ 19%]
+tests/test_phase11_ui_router_contract.py::TestExplainContract::test_returns_envelope PASSED [ 21%]
+tests/test_phase11_ui_router_contract.py::TestExplainContract::test_features_sorted_by_abs_shap_value PASSED [ 24%]
+tests/test_phase11_ui_router_contract.py::TestExplainContract::test_waterfall_and_force_plot_attachments PASSED [ 26%]
+tests/test_phase11_ui_router_contract.py::TestExplainContract::test_method_query_param_accepted PASSED [ 29%]
+tests/test_phase11_ui_router_contract.py::TestRecommendationsContract::test_returns_envelope PASSED [ 31%]
+tests/test_phase11_ui_router_contract.py::TestRecommendationsContract::test_action_card_shape PASSED [ 34%]
+tests/test_phase11_ui_router_contract.py::TestAgentChatContract::test_returns_envelope PASSED [ 36%]
+tests/test_phase11_ui_router_contract.py::TestAgentChatContract::test_chat_message_matches_section_11 PASSED [ 39%]
+tests/test_phase11_ui_router_contract.py::TestAgentChatContract::test_rejects_empty_messages PASSED [ 41%]
+tests/test_phase11_ui_router_contract.py::TestAgentChatStreamContract::test_emits_ndjson_lines PASSED [ 43%]
+tests/test_phase11_ui_router_contract.py::TestAgentChatStreamContract::test_first_event_is_heartbeat PASSED [ 46%]
+tests/test_phase11_ui_router_contract.py::TestCorsCheckContract::test_returns_cors_status PASSED [ 48%]
+tests/test_phase11_ui_router_contract.py::TestPreflightContract::test_options_returns_cors_headers PASSED [ 51%]
+tests/test_phase11_ui_router_contract.py::TestContractsManifest::test_lists_every_endpoint PASSED [ 53%]
+tests/test_phase11_ui_router_contract.py::TestContractsManifest::test_phase_identified PASSED [ 56%]
+tests/test_phase11_ui_router_contract.py::TestRouterMounting::test_all_paths_in_openapi PASSED [ 58%]
+tests/test_phase11_ui_router_contract.py::TestPhase2DigitalTwinCorrections::test_top_level_risk_score_present_and_numeric PASSED [ 60%]
+tests/test_phase11_ui_router_contract.py::TestPhase2DigitalTwinCorrections::test_top_level_risk_score_defaults_safely_when_inference_skipped PASSED [ 63%]
+tests/test_phase11_ui_router_contract.py::TestPhase2DigitalTwinCorrections::test_phase2_arrays_are_never_null PASSED [ 65%]
+tests/test_phase11_ui_router_contract.py::TestPhase2DigitalTwinCorrections::test_asset_identity_populated_from_dict_source PASSED [ 68%]
+tests/test_phase11_ui_router_contract.py::TestPhase2DigitalTwinCorrections::test_phase2_payload_is_strictly_camel_case PASSED [ 70%]
+tests/test_phase11_ui_router_contract.py::TestPhase2GraphRagCorrections::test_execution_logs_detail_retrieval_and_traversal PASSED [ 73%]
+tests/test_phase11_ui_router_contract.py::TestPhase2GraphRagCorrections::test_node_vocabulary_alignment_and_type_validation PASSED [ 75%]
+tests/test_phase11_ui_router_contract.py::TestPhase2GraphRagCorrections::test_edge_relation_names_standardized PASSED [ 78%]
+tests/test_phase11_ui_router_contract.py::TestPhase2GraphRagCorrections::test_citations_serialized_camel_case PASSED [ 80%]
+tests/test_phase11_ui_router_contract.py::TestPhase2GraphRagCorrections::test_phase2_graphrag_arrays_never_null_and_camel PASSED [ 82%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_shap_value_renamed_to_shap_value_camel PASSED [ 85%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_lowercase_and_aliased_methods_accepted PASSED [ 87%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_method_payload_is_tailored_to_lime PASSED [ 90%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_unsupported_method_returns_http_400 PASSED [ 92%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_explicit_waterfall_structure PASSED [ 95%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_explicit_force_plot_structure PASSED [ 97%]
+tests/test_phase11_ui_router_contract.py::TestPhase2ExplainCorrections::test_phase2_xai_arrays_never_null_and_camel PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1
+  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_phase11_ui_router_contract.py: 16 warnings
+  /usr/local/lib/python3.13/site-packages/pydantic/main.py:263: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 41 passed, 17 warnings in 2.08s ========================
