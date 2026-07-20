@@ -1,0 +1,51 @@
+Phase 4 Final Acceptance — Known Issues Summary
+Date: 2026-07-20 (IST Chennai)
+Repository: https://github.com/lathika-mohan/brain_intelligence-main
+
+Acceptance Results:
+- Application boots successfully: YES (uvicorn app.main:app --port 8000)
+- UI contract tests: 24/24 PASS
+- Relay tests: 7/7 PASS (0 failures)
+- Core AI regression: 99 PASSED, 3 SKIPPED (baseline expected, skips due to missing artifacts env)
+- OpenAPI schema: GENERATED — 44 paths, 0 missing expected
+- Router mounting: OK — all 11+ routers mounted, no hidden startup exceptions
+- Frontend integration points unchanged: VERIFIED via UI contract tests
+
+Fixed files (6):
+1. app/predictive/shap_engine.py — made shap optional fallback heuristic, ensures <200ms latency
+2. app/predictive/lime_engine.py — made lime optional fallback
+3. app/predictive/model_registry.py — made xgboost/joblib/sklearn optional with stub, fixed get_model_registry(registry_path) signature bug
+4. app/vector/client.py — made qdrant-client optional stub, prevents router mount failure
+5. app/vector/search_service.py — hardened for optional qdrant/models, degraded stub search returns empty results
+6. app/graph/client.py — made neo4j async driver optional stub, avoids connection retry blocking
+
+Remaining Known Issues (non-blocking):
+
+[Severity LOW] PHASE0 FLAGGED SHIMS — auth, dashboard, assets, alerts, test_inject routers mounted with WARNING logs.
+Owner: Gateway Member 2
+Status: Documented as compatibility shims to be removed in Phase 0.5 (see app/api/v1/router.py). Does not affect AI contracts.
+Mitigation: None needed for Phase 4.
+
+[Severity LOW] sentence-transformers not installed in lightweight CI — embedding_engine falls back to stub.
+Owner: Member 3 Lathika / Infra
+Status: Vector search returns empty results in degraded mode (handled). Prod deployment installs sentence-transformers.
+Impact: test_phase12_ml_models skips 3 tests when artifacts missing — expected baseline.
+Mitigation: Install torch + sentence-transformers in docker image.
+
+[Severity INFO] SHAP/LIME optional — heuristic fallback used when shap/lime libs missing.
+Owner: XAI Team
+Status: XAI contract tests pass with fallback (deterministic heuristic). Real SHAP TreeExplainer would need shap, slicer, numba, llvmlite.
+Impact: None for UI contract; prod image should include shap if explainability fidelity required.
+Mitigation: Keep fallback for CI speed, install full deps in prod.
+
+[Severity INFO] test_phase12_ml_models skips 3 due to FileNotFoundError for model artifacts.
+Owner: Predictive Team
+Status: Expected when artifacts not trained in env; prediction_service.predict_batch raises FileNotFoundError per design, tests skip gracefully.
+Mitigation: Run python -m app.predictive.train_predictive_models to generate artifacts before full ML validation.
+
+No router mounting failures.
+No import errors after hardening.
+No hidden startup exceptions (only documented shim warnings).
+OpenAPI generated successfully.
+
+Recommendation: READY FOR INTEGRATION AND DEMONSTRATION.

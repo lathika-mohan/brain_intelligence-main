@@ -1,27 +1,52 @@
 """
-Phase 4 — Qdrant client lifecycle
-Thread-safe singleton with sync + async support
+Phase 4 — Qdrant client lifecycle — hardened, optional.
+Thread-safe singleton with sync + async support and graceful degraded mode
+when qdrant-client is not installed (CI / lightweight test runner).
 """
-
 from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Optional
-
-from qdrant_client import QdrantClient
-from qdrant_client.http import models as rest
+from typing import Optional, Any
 
 from app.core.config import get_settings, Settings
 
 logger = logging.getLogger(__name__)
 
-_client_instance: Optional[QdrantClient] = None
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models as rest
+    HAS_QDRANT = True
+except Exception as e:  # pragma: no cover
+    QdrantClient = Any  # type: ignore
+    rest = Any  # type: ignore
+    HAS_QDRANT = False
+    logger.info("qdrant-client not available — vector client will operate in degraded stub mode: %s", e)
 
+_client_instance: Optional[Any] = None
 
-def build_qdrant_client(settings: Optional[Settings] = None) -> QdrantClient:
-    """Construct a configured QdrantClient (sync)."""
+class _StubQdrantClient:
+    """Very small in-memory stub that satisfies health checks."""
+    def __init__(self, *args, **kwargs):
+        self._collections = []
+    def get_collections(self):
+        class _Resp:
+            collections = []
+        return _Resp()
+    def collection_exists(self, collection_name: str = "") -> bool:
+        return False
+    def close(self):
+        pass
+    def search(self, *a, **kw):
+        return []
+
+def build_qdrant_client(settings: Optional[Settings] = None) -> Any:
+    """Construct a configured QdrantClient (sync) or stub if missing."""
     settings = settings or get_settings()
+    if not HAS_QDRANT:
+        logger.warning("Qdrant client stub used — no real vector DB")
+        return _StubQdrantClient()
+
     client_kwargs = {
         "url": settings.qdrant_url,
         "prefer_grpc": settings.qdrant_prefer_grpc,
@@ -35,23 +60,18 @@ def build_qdrant_client(settings: Optional[Settings] = None) -> QdrantClient:
     logger.debug("Qdrant client initialized: %s (grpc=%s)", settings.qdrant_url, settings.qdrant_prefer_grpc)
     return client
 
-
-def get_qdrant_client() -> QdrantClient:
+def get_qdrant_client() -> Any:
     """Singleton accessor — cached process-wide."""
     global _client_instance
     if _client_instance is None:
         _client_instance = build_qdrant_client()
     return _client_instance
 
-
 @lru_cache(maxsize=1)
-def get_qdrant_client_cached() -> QdrantClient:
-    """lru_cache variant for FastAPI Depends compatibility."""
+def get_qdrant_client_cached() -> Any:
     return build_qdrant_client()
 
-
 def close_qdrant_client() -> None:
-    """Graceful shutdown helper."""
     global _client_instance
     if _client_instance is not None:
         try:
@@ -60,20 +80,14 @@ def close_qdrant_client() -> None:
             pass
         _client_instance = None
 
-
-# ---------------------------------------------------------------------------
-# Health / readiness probes
-# ---------------------------------------------------------------------------
-
-def check_qdrant_health(client: Optional[QdrantClient] = None) -> dict:
-    """Return health dict suitable for /health/ready."""
+def check_qdrant_health(client: Optional[Any] = None) -> dict:
     c = client or get_qdrant_client()
     try:
-        # collections list is a cheap ping
         collections = c.get_collections()
+        col_count = len(getattr(collections, 'collections', []))
         return {
-            "status": "ok",
-            "collections": len(collections.collections),
+            "status": "ok" if HAS_QDRANT else "degraded_stub",
+            "collections": col_count,
             "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z",
         }
     except Exception as e:
@@ -83,12 +97,7 @@ def check_qdrant_health(client: Optional[QdrantClient] = None) -> dict:
             "error": str(e),
         }
 
-
-# ---------------------------------------------------------------------------
-# Collection helpers (thin wrappers — full lifecycle in qdrant_manager)
-# ---------------------------------------------------------------------------
-
-def collection_exists(collection_name: str, client: Optional[QdrantClient] = None) -> bool:
+def collection_exists(collection_name: str, client: Optional[Any] = None) -> bool:
     c = client or get_qdrant_client()
     try:
         return c.collection_exists(collection_name=collection_name)
