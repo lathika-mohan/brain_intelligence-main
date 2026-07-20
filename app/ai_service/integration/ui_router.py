@@ -63,12 +63,6 @@ from app.ai_service.integration.formatters.payload_formatters import (
     format_time_series_points,
     format_vis_network_elements,
 )
-from app.ai_service.integration.response_shaping import (
-    SUPPORTED_EXPLAIN_METHODS,
-    UnsupportedExplainMethodError,
-    resolve_explain_method,
-    sanitize_arrays,
-)
 from app.ai_service.integration.schemas.ui_schemas import (
     UIAPIResponse,
     UIGraphRAGPayload,
@@ -165,28 +159,18 @@ def _ui_response(
     request_id: str,
     success: bool = True,
     error: Optional[Dict[str, Any]] = None,
-    http_status: Optional[int] = None,
 ) -> JSONResponse:
     """Wrap a payload in the Section 11 ``UIAPIResponse`` envelope.
 
     Always returns a ``UIAPIResponse``-shaped dict, even on errors, so
     the front-end can rely on a single parsing path.
-
-    Phase 2 — ``http_status`` lets a handler pick a specific non-200 code
-    (e.g. **400** for a client-side validation error such as an
-    unsupported explainability ``method``) while keeping the envelope
-    shape identical; engine failures still default to 503.
     """
 
     body = to_ui_api_envelope(
         success=success, data=data, request_id=request_id, error=error
     )
-    if success:
-        status_code = status.HTTP_200_OK
-    else:
-        status_code = http_status or status.HTTP_503_SERVICE_UNAVAILABLE
     return JSONResponse(
-        status_code=status_code,
+        status_code=status.HTTP_200_OK if success else status.HTTP_503_SERVICE_UNAVAILABLE,
         content=body,
         headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
     )
@@ -252,12 +236,6 @@ async def digital_twin(
         payload = adapt_digital_twin_payload(
             asset=asset, inference=inference, history=history_frames
         )
-        # Phase 2 — response-shaping isolation: the top-level ``riskScore``
-        # is now attached by the adapter (computed from the inference
-        # failure probability, safely defaulted otherwise). Run the
-        # explicit array sanitizer here as a final guarantee that no
-        # list attribute ever serializes as null.
-        payload = sanitize_arrays(payload)
         # Validate the response through the strict Pydantic model
         # so any drift surfaces as a 500 in CI.
         from app.ai_service.integration.schemas.ui_schemas import UIDigitalTwinPayload
@@ -302,9 +280,6 @@ async def graphrag_query(
             top_k=int(body.get("top_k", 8)),
         )
         response = await graphrag_engine.query(req)
-        # Phase 2 — the adapter now appends structured execution logs,
-        # aligns node ids/labels/relation names to the frontend vocabulary,
-        # and strictly validates node types against the panel ontology.
         payload = adapt_graphrag_payload(response, query=req.query_text)
         # Augment with chart-ready extras
         from app.ai_service.integration.formatters.confidence_badge import confidence_to_badge
@@ -312,8 +287,6 @@ async def graphrag_query(
         payload["badge"] = confidence_to_badge(payload["confidence"]).value
         payload["warningLevel"] = confidence_to_warning_level(payload["confidence"])
         payload["color"] = confidence_to_color(payload["confidence"])
-        # Phase 2 — strict non-null array protection prior to serialization.
-        payload = sanitize_arrays(payload)
         UIGraphRAGPayload.model_validate(payload)
         return _ui_response(data=payload, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
@@ -344,52 +317,10 @@ async def explain(
     prediction_id: Annotated[str, Path(min_length=1)],
     request: Request,
     asset_id: Annotated[str, Query(min_length=1)] = "P-101A",
-    method: Annotated[
-        str,
-        Query(
-            description=(
-                "Explainability method. Case-insensitive; accepts shap, lime, "
-                "integrated_gradients (ig), permutation. Unsupported values "
-                "return a clear HTTP 400 validation error."
-            )
-        ),
-    ] = "SHAP",
+    method: Annotated[str, Query(pattern="^(SHAP|LIME|INTEGRATED_GRADIENTS|PERMUTATION)$")] = "SHAP",
     xai_engine: Any = _LazyEngineDep("get_xai_engine"),
 ) -> JSONResponse:
     request_id = _request_id(request)
-    # ------------------------------------------------------------------
-    # Phase 2 — strictly honor the ``method`` query parameter.
-    # Case-insensitive + alias-aware (?method=shap, ?method=lime,
-    # ?method=integrated_gradients all resolve). Anything unsupported is a
-    # client error → HTTP 400 in the UIAPIResponse envelope, never a 422
-    # or a silent fallback to SHAP.
-    # ------------------------------------------------------------------
-    try:
-        resolved_method = resolve_explain_method(method)
-    except UnsupportedExplainMethodError as exc:
-        return _ui_response(
-            data={
-                "predictionId": prediction_id,
-                "assetId": asset_id,
-                "baseValue": 0.0,
-                "predictionValue": 0.0,
-                "features": [],
-                "confidenceMatrix": [],
-                "rootCause": {},
-            },
-            request_id=request_id,
-            success=False,
-            error={
-                "code": "XAI_UNSUPPORTED_METHOD",
-                "message": str(exc),
-                "details": {
-                    "method": method,
-                    "supported": list(SUPPORTED_EXPLAIN_METHODS),
-                    "acceptedAliases": ["shap", "lime", "integrated_gradients", "ig", "permutation"],
-                },
-            },
-            http_status=status.HTTP_400_BAD_REQUEST,
-        )
     try:
         from app.models.xai import ExplanationMethod, ExplanationRequest, ExplanationScope
 
@@ -400,18 +331,13 @@ async def explain(
             ExplanationRequest(
                 asset_id=asset_id,
                 explanation_id=prediction_id,
-                method=ExplanationMethod(resolved_method),
+                method=ExplanationMethod(method),
                 scope=ExplanationScope.LOCAL,
             ),
             history,
         )
-        # requested_method tailors the structural payload (feature
-        # descriptors, method echo) to the requested explainability method.
         payload = adapt_explainability_payload(
-            explanation=explanation,
-            prediction_id=prediction_id,
-            asset_id=asset_id,
-            requested_method=resolved_method,
+            explanation=explanation, prediction_id=prediction_id, asset_id=asset_id
         )
         payload["waterfall"] = format_shap_waterfall(
             payload["features"], base_value=payload["baseValue"]
@@ -421,8 +347,6 @@ async def explain(
             base_value=payload["baseValue"],
             prediction_value=payload["predictionValue"],
         )
-        # Phase 2 — strict non-null array protection prior to serialization.
-        payload = sanitize_arrays(payload)
         UIShapExplanation.model_validate(payload)
         return _ui_response(data=payload, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
@@ -513,6 +437,40 @@ async def agent_chat(
         from app.ai_service.agent_runtime import run_agent_chat
 
         messages_raw = body.get("messages", [])
+        
+        # Validation of empty, blank, or whitespace-only message
+        is_empty = False
+        if not messages_raw:
+            is_empty = True
+        else:
+            user_contents = [
+                str(m.get("content") or "").strip()
+                for m in messages_raw
+                if str(m.get("role", "")).lower() == "user"
+            ]
+            if not user_contents:
+                user_contents = [str(m.get("content") or "").strip() for m in messages_raw]
+            
+            if not user_contents or any(not content for content in user_contents):
+                is_empty = True
+
+        if is_empty:
+            body_envelope = to_ui_api_envelope(
+                success=False,
+                data={},
+                request_id=request_id,
+                error={
+                    "code": "INVALID_INPUT",
+                    "message": "Message text cannot be empty, blank, or whitespace-only.",
+                    "details": {"field": "messages"},
+                }
+            )
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=body_envelope,
+                headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
+            )
+
         messages = [
             AgentChatMessage(
                 role=AgentRole(str(m.get("role", "user")).lower()),
@@ -521,19 +479,14 @@ async def agent_chat(
             for m in messages_raw
             if m.get("content")
         ]
-        if not messages:
-            return _ui_response(
-                data={},
-                request_id=request_id,
-                success=False,
-                error={
-                    "code": "INVALID_REQUEST",
-                    "message": "At least one message is required.",
-                    "details": {"field": "messages"},
-                },
-            )
+
+        # Session support: read and persist sessionId from request body
+        session_id = body.get("sessionId") or body.get("session_id")
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
         req = AgentChatRequest(
-            session_id=body.get("session_id"),
+            session_id=session_id,
             asset_id=body.get("asset_id"),
             messages=messages,
             stream=False,
@@ -541,8 +494,17 @@ async def agent_chat(
             include_recommendations=bool(body.get("include_recommendations", True)),
         )
         response = await run_agent_chat(req)
+        
+        # AI Reply Shaping format (combines original Section 11 UIChat and the new spec)
         chat = to_ui_chat_message(response)
+        chat["sessionId"] = session_id
+        chat["messageId"] = chat.get("messageId") or f"msg-{session_id}"
+        chat["reply"] = response.final_answer or ""
+        chat["payload"] = response.final_answer or ""
+        chat["timestamp"] = chat.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        chat["suggestedActions"] = [] # default to [] if empty; never None!
         chat["states"] = [s.model_dump(mode="json") for s in response.states]
+        
         return _ui_response(data=chat, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("agent_chat failed")
@@ -590,8 +552,14 @@ async def agent_chat_stream(
             for m in messages_raw
             if m.get("content")
         ]
+
+        # Session support: read and persist sessionId from request body
+        session_id = body.get("sessionId") or body.get("session_id")
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
         req = AgentChatRequest(
-            session_id=body.get("session_id"),
+            session_id=session_id,
             asset_id=body.get("asset_id"),
             messages=messages,
             stream=True,
@@ -601,11 +569,29 @@ async def agent_chat_stream(
         response = await run_agent_chat(req)
 
         async def event_iter() -> AsyncIterator[bytes]:
+            seq_num = 1
             async for block in to_chat_event_stream(
                 response.states, session_id=response.session_id, asset_id=response.asset_id
             ):
                 import json as _json
 
+                # Required camelCase fields and sequence starting at 1
+                block["seq"] = seq_num
+                
+                # Map event types to Phase 3 spec types (start, delta, done, ping)
+                event_type = block.get("eventType")
+                if event_type == "heartbeat":
+                    block["type"] = "ping"
+                elif seq_num == 2 or (seq_num == 1 and event_type != "heartbeat"):
+                    block["type"] = "start"
+                elif block.get("isFinal") or event_type == "final":
+                    block["type"] = "done"
+                    block["metadata"] = block.get("payload") or {}
+                else:
+                    block["type"] = "delta"
+                    block["content"] = block.get("message") or ""
+
+                seq_num += 1
                 yield (_json.dumps(block, default=str) + "\n").encode("utf-8")
 
         return StreamingResponse(

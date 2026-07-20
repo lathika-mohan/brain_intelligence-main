@@ -385,7 +385,7 @@ class UISopLinkage(BaseModel):
 class UIRecommendationAction(BaseModel):
     """Single action card on the prescriptive-action panel."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     actionId: str
     actionType: str
@@ -397,6 +397,13 @@ class UIRecommendationAction(BaseModel):
     recommendedCompletionBy: str
     sop: Optional[UISopLinkage] = None
     rank: int = Field(default=1, ge=1)
+
+    # Phase 3 compatibility fields
+    actionCardId: Optional[str] = None
+    title: Optional[str] = None
+    costAvoidance: Optional[float] = None
+    riskScore: Optional[float] = None
+    completionDate: Optional[str] = None
 
 
 # Resolve forward references for the generic envelope

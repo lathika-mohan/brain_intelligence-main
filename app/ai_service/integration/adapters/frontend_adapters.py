@@ -26,20 +26,8 @@ import hashlib
 import math
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from app.ai_service.integration.response_shaping import (
-    build_graphrag_execution_logs,
-    camelize_keys,
-    compute_top_level_risk_score,
-    method_descriptor,
-    normalize_node_id,
-    normalize_node_label,
-    normalize_relation_name,
-    sanitize_arrays,
-    sort_features_by_impact,
-    validate_node_type,
-)
 from app.ai_service.integration.schemas.ui_schemas import (
     UIActionPriority,
     UIAPIError,
@@ -240,9 +228,7 @@ def _project_graph_layout(
         UIGraphNodeType.RECORD: [],
     }
     for node in nodes:
-        # Phase 2 — strict validation / mapping through the shared
-        # response-shaping vocabulary gate (never leaks a raw type).
-        vocab = UIGraphNodeType(validate_node_type(getattr(node, "type", None)))
+        vocab = _NODE_TYPE_VOCAB.get(str(node.type).lower(), UIGraphNodeType.COMPONENT)
         bins[vocab].append(node)
 
     column_x = {
@@ -285,29 +271,17 @@ def adapt_graphrag_payload(
     raw_edges = list(getattr(response, "graph_edges", []) or [])
     layout = _project_graph_layout(raw_nodes, raw_edges)
 
-    # Phase 2 — node vocabulary alignment + strict node type validation.
-    # Raw ontology types (e.g. "FailureMode", "SOP", "WorkOrder") are mapped
-    # into the closed panel vocabulary; anything unrecognized degrades to
-    # "component" and is reported in the execution logs.
-    remapped_types: List[str] = []
     nodes: List[Dict[str, Any]] = []
     for node in raw_nodes:
-        raw_type = str(getattr(node, "type", "") or "")
-        validated_type = validate_node_type(raw_type)
-        if raw_type.strip().lower() != validated_type:
-            remapped_types.append(raw_type or "<empty>")
-
-        node_id = normalize_node_id(getattr(node, "id", ""))
-        label = normalize_node_label(getattr(node, "label", None), node_id=node_id)
-
+        vocab = _NODE_TYPE_VOCAB.get(str(node.type).lower(), UIGraphNodeType.COMPONENT)
         # Pre-existing x/y from the backend take precedence; otherwise use layout.
         x = getattr(node, "x", None)
         y = getattr(node, "y", None)
         if x is None or y is None:
-            lx, ly = layout.get(node_id, (60.0, 60.0))
+            lx, ly = layout.get(str(node.id), (60.0, 60.0))
         else:
             lx, ly = float(x), float(y)
-        details = label
+        details = getattr(node, "label", str(node.id))
         # Promote a few common properties into a one-liner
         props = dict(getattr(node, "properties", {}) or {})
         if "description" in props:
@@ -316,9 +290,9 @@ def adapt_graphrag_payload(
             details = f"{details} (status: {props['status']})"
         nodes.append(
             {
-                "id": node_id,
-                "label": label,
-                "type": validated_type,
+                "id": str(node.id),
+                "label": str(getattr(node, "label", node.id)),
+                "type": vocab.value,
                 "x": lx,
                 "y": ly,
                 "details": details,
@@ -329,10 +303,9 @@ def adapt_graphrag_payload(
     for edge in raw_edges:
         edges.append(
             {
-                "source": normalize_node_id(getattr(edge, "source", "")),
-                "target": normalize_node_id(getattr(edge, "target", "")),
-                # Phase 2 — relation names standardized to the canonical set
-                "label": normalize_relation_name(getattr(edge, "relationship", "")),
+                "source": str(getattr(edge, "source", "")),
+                "target": str(getattr(edge, "target", "")),
+                "label": str(getattr(edge, "relationship", "")),
                 "highlighted": False,
             }
         )
@@ -345,10 +318,8 @@ def adapt_graphrag_payload(
     hl_edges: List[str] = []
     for c in citations:
         node_id = getattr(c, "source_node_id", None)
-        if node_id:
-            node_id = normalize_node_id(node_id)
-            if node_id and node_id not in hl_nodes:
-                hl_nodes.append(node_id)
+        if node_id and node_id not in hl_nodes:
+            hl_nodes.append(str(node_id))
     # Mark an edge highlighted when both endpoints are highlighted
     for edge in edges:
         if edge["source"] in hl_nodes and edge["target"] in hl_nodes:
@@ -357,72 +328,47 @@ def adapt_graphrag_payload(
             if edge_id not in hl_edges:
                 hl_edges.append(edge_id)
 
-    # Phase 2 — structured execution log trace detailing every retrieval /
-    # graph-traversal step, rendered chronologically by the panel.
+    # Build a chronological logs block so the panel's animation strip is populated.
+    logs: List[str] = []
     vector_hits = int(getattr(response, "vector_hits", 0) or 0)
-    logs = build_graphrag_execution_logs(
-        query=query,
-        vector_hits=vector_hits,
-        node_count=len(nodes),
-        edge_count=len(edges),
-        citation_count=len(citations),
-        answer_ready=bool(getattr(response, "answer", None)),
-        overall_confidence=getattr(response, "overall_confidence", None),
-        remapped_types=remapped_types,
-        citations=citations,
-        latency_ms=getattr(response, "latency_ms", None),
-    )
+    if query:
+        logs.append(f"Vector search initiated: '{query}'")
+    else:
+        logs.append("Vector search initiated")
+    if vector_hits:
+        logs.append(f"Vector hits: {vector_hits} chunks")
+    for idx, c in enumerate(citations[:5]):
+        label = getattr(c, "source_type", None) or getattr(c, "source_document", None) or "citation"
+        logs.append(f"Citation {idx + 1}: {label} (confidence={getattr(c, 'confidence_score', 0.0):.2f})")
+    if nodes:
+        logs.append(f"Sub-graph projected: {len(nodes)} nodes / {len(edges)} edges")
+    if getattr(response, "answer", None):
+        logs.append("Synthesizing response context via LLM...")
+    else:
+        logs.append("Awaiting LLM synthesis…")
 
-    # Phase 2 — camelCase everywhere: raw backend citation dumps use
-    # snake_case keys (citation_id, claim_span, ...); convert them before
-    # they reach the frontend contract.
-    def _serialize_citation(c: Any) -> Dict[str, Any]:
-        if hasattr(c, "model_dump"):
-            raw = c.model_dump(mode="json")
-        elif isinstance(c, dict):
-            raw = dict(c)
-        else:
-            raw = dict(getattr(c, "__dict__", {}))
-        return camelize_keys(raw)
-
-    payload = {
+    return {
         "answer": getattr(response, "answer", "") or "",
         "logs": logs,
         "nodes": nodes,
         "edges": edges,
         "highlightedNodes": hl_nodes,
         "highlightedEdges": hl_edges,
-        "citations": [_serialize_citation(c) for c in citations],
+        "citations": [
+            (c.model_dump(mode="json") if hasattr(c, "model_dump")
+             else dict(c) if isinstance(c, dict)
+             else c.__dict__)
+            for c in citations
+        ],
         "vectorHits": vector_hits,
         "confidence": float(getattr(response, "overall_confidence", 0.0) or 0.0),
         "generatedAt": datetime.now(timezone.utc).isoformat(),
     }
-    # Phase 2 — strict non-null array protection prior to serialization.
-    return sanitize_arrays(payload)
 
 
 # ===========================================================================
 # 3. Digital Twin adapter — InferenceResponse + history → UIDigitalTwinPayload
 # ===========================================================================
-def _field(source: Any, *names: str, default: Any = None) -> Any:
-    """Read a field from an object **or** a mapping (Phase 2).
-
-    Route handlers may pass assets/entities as plain dicts; engine models
-    expose attributes. This helper normalizes both access styles so the
-    wire payload is correctly populated regardless of the container type.
-    Returns the first non-``None`` value found, else ``default``.
-    """
-
-    for name in names:
-        if isinstance(source, Mapping):
-            value = source.get(name, None)
-        else:
-            value = getattr(source, name, None)
-        if value is not None:
-            return value
-    return default
-
-
 def _enum_value(value: Any) -> str:
     """Best-effort string conversion for an enum (or string) value.
 
@@ -533,15 +479,13 @@ def adapt_digital_twin_payload(
     latest_frame = history[-1] if history else None
     telemetry = _frame_to_telemetry(latest_frame) if latest_frame else UITelemetry()
 
-    # Section 11 asset shape — Phase 2: read through ``_field`` so dict- and
-    # object-shaped assets both populate the wire payload correctly.
-    asset_id_value = str(_field(asset, "id", "asset_id", default=""))
+    # Section 11 asset shape
     ui_asset = UIAsset(
-        id=asset_id_value,
-        name=str(_field(asset, "name", default="") or asset_id_value),
-        type=str(_field(asset, "type", "asset_type", default="GENERIC")),
-        status=UIAssetStatus(_enum_value(_field(asset, "status", default="OPERATIONAL"))),
-        parentId=_field(asset, "parentId", "parent_id"),
+        id=str(getattr(asset, "id", "")),
+        name=str(getattr(asset, "name", getattr(asset, "id", ""))),
+        type=str(getattr(asset, "type", "GENERIC")),
+        status=UIAssetStatus(_enum_value(getattr(asset, "status", "OPERATIONAL"))),
+        parentId=getattr(asset, "parentId", None) or getattr(asset, "parent_id", None),
     )
 
     rul_value: Optional[float] = None
@@ -624,26 +568,13 @@ def adapt_digital_twin_payload(
         anomalous_sensors=anomalous_sensors,
     )
 
-    # Phase 2 — top-level ``riskScore``: read straight from the already
-    # computed inference failure probability, mirror the telemetry card's
-    # derivation, and safely default to 0.0 when inference is unavailable.
-    # Never null, always a finite 0..100 float.
-    top_level_risk_score = compute_top_level_risk_score(
-        inference=inference,
-        telemetry_risk_score=telemetry.riskScore,
-    )
-
     payload = UIDigitalTwinPayload(
         asset=ui_asset,
         telemetry=telemetry,
         history=frames,
-        riskScore=top_level_risk_score,
         activeAnomaly=active_anomaly,
     )
-    # by_alias=True → the envelope sees ``generatedAt`` (camelCase everywhere).
-    dumped = payload.model_dump(mode="json", by_alias=True)
-    # Phase 2 — strict non-null array protection prior to serialization.
-    return sanitize_arrays(dumped)
+    return payload.model_dump(mode="json", by_alias=False)
 
 
 # ===========================================================================
@@ -654,7 +585,6 @@ def adapt_explainability_payload(
     explanation: Any,
     prediction_id: str,
     asset_id: str,
-    requested_method: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Convert a :class:`ExplanationResponse` into the ShapExplainability shape.
 
@@ -663,35 +593,16 @@ def adapt_explainability_payload(
     layout deterministic and reduces re-render churn). Description
     strings are enriched with engineering units when present in
     ``properties`` so the panel's tooltip text is informative.
-
-    Phase 2 — ``requested_method`` tailors the structural payload to the
-    explainability method the frontend asked for (``shap`` / ``lime`` /
-    ``integrated_gradients`` / ``permutation``): the quantity attached to
-    each feature is *described* with the correct method semantics
-    ("SHAP contribution" vs "LIME local linear weight" vs
-    "Integrated-gradients attribution"). Only labels/metadata change —
-    the underlying attribution scores are never recomputed.
     """
 
     impacts = list(getattr(explanation, "local_feature_importance", []) or [])
     # Sort desc by |impact_weight| — the panel renders top-to-bottom.
     impacts.sort(key=lambda fi: abs(float(getattr(fi, "impact_weight", 0.0))), reverse=True)
 
-    # Phase 2 — resolve the effective method (request param wins over the
-    # engine echo) so the payload is tailored to the requested method.
-    engine_method = getattr(explanation, "method", "SHAP")
-    engine_method_str = (
-        engine_method.value if hasattr(engine_method, "value") else str(engine_method)
-    )
-    effective_method = (requested_method or engine_method_str or "SHAP").upper()
-    descriptor = method_descriptor(effective_method)
-
     features: List[Dict[str, Any]] = []
     for fi in impacts:
         name = str(getattr(fi, "feature_name", "feature"))
         value = float(getattr(fi, "feature_value", 0.0))
-        # Phase 2 — shap_value → shapValue rename happens at the
-        # UIShapFeature boundary for every method.
         shap_value = float(getattr(fi, "impact_weight", 0.0))
         # Human-readable units lookup
         unit_map = {
@@ -707,7 +618,7 @@ def adapt_explainability_payload(
             value = 0.0
         sign = "+" if shap_value >= 0 else ""
         desc = (
-            f"{descriptor} {sign}{shap_value:.2f} "
+            f"SHAP contribution {sign}{shap_value:.2f} "
             f"(rank {getattr(fi, 'rank', 0)}, observed {value:g}{unit})"
         )
         features.append(
@@ -718,9 +629,6 @@ def adapt_explainability_payload(
                 desc=desc,
             ).model_dump(mode="json")
         )
-    # Phase 2 — belt-and-braces: guarantee the |shapValue| desc ordering
-    # even if an upstream engine hands us pre-sorted-but-stale ranks.
-    features = sort_features_by_impact(features)
 
     root_cause = getattr(explanation, "root_cause", None)
     rc_dict: Dict[str, Any] = {}
@@ -745,7 +653,8 @@ def adapt_explainability_payload(
                 }
             )
 
-    method_str = effective_method
+    method_val = getattr(explanation, "method", "SHAP")
+    method_str = method_val.value if hasattr(method_val, "value") else str(method_val)
     scope_val = getattr(explanation, "scope", "LOCAL")
     scope_str = scope_val.value if hasattr(scope_val, "value") else str(scope_val)
 
@@ -760,12 +669,7 @@ def adapt_explainability_payload(
         confidenceMatrix=confidence_matrix,
         rootCause=rc_dict,
     )
-    # Phase 2 — camelCase everywhere + strict non-null arrays. ``camelize_keys``
-    # sweeps any snake_case key a nested raw dump leaked (e.g. inside
-    # confidenceMatrix entries), ``sanitize_arrays`` guarantees no list
-    # attribute ever serializes as null.
-    dumped = payload.model_dump(mode="json", by_alias=False)
-    return sanitize_arrays(camelize_keys(dumped))
+    return payload.model_dump(mode="json", by_alias=False)
 
 
 # ===========================================================================
@@ -805,22 +709,30 @@ def adapt_recommendations_to_actions(response: Any) -> List[Dict[str, Any]]:
             str(getattr(rec, "severity_tier", "MONITOR")).upper(), UISeverityTier.MONITOR
         )
 
+        action_id_val = str(getattr(rec, "action_id", uuid.uuid4().hex[:10]))
+        action_type_val = str(getattr(rec, "action_type", "INSPECT"))
+        risk_score_val = float(getattr(rec, "risk_score_if_ignored", 0.0) or 0.0)
+        cost_avoidance_val = float(getattr(rec, "estimated_cost_avoidance_usd", 0.0) or 0.0)
+
         actions.append(
             UIRecommendationAction(
-                actionId=str(getattr(rec, "action_id", uuid.uuid4().hex[:10])),
-                actionType=str(getattr(rec, "action_type", "INSPECT")),
+                actionId=action_id_val,
+                actionType=action_type_val,
                 description=str(getattr(rec, "description", "")),
                 priority=priority,
                 severityTier=tier,
-                riskScoreIfIgnored=float(
-                    getattr(rec, "risk_score_if_ignored", 0.0) or 0.0
-                ),
-                estimatedCostAvoidanceUsd=float(
-                    getattr(rec, "estimated_cost_avoidance_usd", 0.0) or 0.0
-                ),
+                riskScoreIfIgnored=risk_score_val,
+                estimatedCostAvoidanceUsd=cost_avoidance_val,
                 recommendedCompletionBy=completion_str,
                 sop=sop,
                 rank=int(getattr(rec, "rank", 1) or 1),
+                
+                # Phase 3 compatibility fields
+                actionCardId=action_id_val,
+                title=f"{action_type_val.title()} Recommendation" if action_type_val else "Recommendation",
+                costAvoidance=cost_avoidance_val,
+                riskScore=risk_score_val,
+                completionDate=completion_str,
             ).model_dump(mode="json")
         )
     return actions
@@ -878,17 +790,18 @@ def to_ui_api_envelope(
 # 7. Asset / alert helpers (used by the dedicated UI endpoints)
 # ===========================================================================
 def adapt_asset(asset: Any) -> Dict[str, Any]:
-    """Coerce any asset-like object (or dict) into the Section 11 ``UIAsset`` shape."""
+    """Coerce any asset-like object into the Section 11 ``UIAsset`` shape."""
 
     # Fall back to id if name is missing *or* None
-    asset_id_value = str(_field(asset, "id", "asset_id", default=""))
-    name = _field(asset, "name") or asset_id_value
+    name = getattr(asset, "name", None)
+    if not name:
+        name = getattr(asset, "id", "")
     return UIAsset(
-        id=asset_id_value,
+        id=str(getattr(asset, "id", "")),
         name=str(name),
-        type=str(_field(asset, "type", "asset_type", default="GENERIC")),
-        status=UIAssetStatus(_enum_value(_field(asset, "status", default="OPERATIONAL"))),
-        parentId=_field(asset, "parentId", "parent_id"),
+        type=str(getattr(asset, "type", "GENERIC")),
+        status=UIAssetStatus(_enum_value(getattr(asset, "status", "OPERATIONAL"))),
+        parentId=getattr(asset, "parentId", None) or getattr(asset, "parent_id", None),
     ).model_dump(mode="json")
 
 
