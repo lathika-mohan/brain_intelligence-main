@@ -1,0 +1,30 @@
+Phase 4 UI Contract verified bundle contents
+===========================================
+
+Audit result:
+- Repository already satisfied tests/test_phase11_ui_router_contract.py
+- No source-code edits were required in this execution run
+- Bundle contains the verified implementation files and validation artifacts
+
+Included files:
+- app/ai_service/dependencies.py
+- app/ai_service/agent_runtime.py
+- app/ai_service/middleware.py
+- app/ai_service/responses.py
+- app/ai_service/main_router.py
+- app/ai_service/ui_router.py
+- app/ai_service/integration/ui_router.py
+- app/ai_service/integration/cors_headers.py
+- app/ai_service/integration/adapters/chat_event_adapter.py
+- app/ai_service/integration/adapters/frontend_adapters.py
+- app/ai_service/integration/formatters/confidence_badge.py
+- app/ai_service/integration/formatters/payload_formatters.py
+- app/ai_service/integration/schemas/ui_request_schemas.py
+- app/ai_service/integration/schemas/ui_schemas.py
+- app/api/v1/router.py
+- app/main.py
+- tests/test_phase11_ui_router_contract.py
+- tree.txt
+- phase4_ui_contract_pytest.log
+- phase4_ui_contract_completion_summary.md
+- phase4_ui_contract_worked_files_manifest.txt
