@@ -49,6 +49,11 @@ from typing import Any, Mapping, Optional, Tuple
 
 import httpx
 
+try:
+    from .payload_compare import compare_payloads, assert_byte_identical, PayloadComparison
+except ImportError:
+    from payload_compare import compare_payloads, assert_byte_identical, PayloadComparison
+
 logger = logging.getLogger("gateway.transparent_proxy")
 
 # The AI service's internal-only guard expects this header from a trusted
@@ -133,89 +138,10 @@ async def relay_passthrough(
     return body
 
 
-def compare_payloads(
-    direct: Mapping[str, Any],
-    relayed: Mapping[str, Any],
-    volatile_keys: Optional[set[str]] = None,
-) -> Tuple[bool, list[dict[str, Any]]]:
-    """
-    Compare a DIRECT (AI microservice) payload against a RELAYED (gateway) one.
-
-    Returns ``(identical, matrix)`` where ``matrix`` is a per-property audit
-    table. A property is flagged NON-IDENTICAL on ANY of:
-      * value differs
-      * type differs (e.g. float 0.85 vs string "0.85")
-      * key present on one side only (added/dropped)
-
-    Keys listed in ``volatile_keys`` (request_id, generated_at, explanation_id,
-    inference_latency_ms, timestamps) are allowed to differ in *value* but must
-    still match in *type* — a string timestamp must not become a float, etc.
-    """
-    volatile_keys = volatile_keys or set()
-    matrix: list[dict[str, Any]] = []
-    identical = True
-
-    all_keys = list(direct.keys()) + [k for k in relayed.keys() if k not in direct]
-    for key in dict.fromkeys(all_keys):  # preserve order, dedupe
-        in_direct = key in direct
-        in_relayed = key in relayed
-        d_val = direct.get(key) if in_direct else "<<MISSING>>"
-        r_val = relayed.get(key) if in_relayed else "<<MISSING>>"
-
-        # Recurse one level for nested mappings (e.g. data.*)
-        if in_direct and in_relayed and isinstance(d_val, Mapping) and isinstance(r_val, Mapping):
-            sub_ok, sub_matrix = compare_payloads(d_val, r_val, volatile_keys)
-            for row in sub_matrix:
-                row["property"] = f"{key}.{row['property']}"
-                matrix.append(row)
-                if not row["byte_identical"]:
-                    identical = False
-            continue
-
-        d_type = type(d_val).__name__
-        r_type = type(r_val).__name__
-        value_match = (d_val == r_val)
-        type_match = (d_type == r_type)
-        present_match = in_direct and in_relayed
-
-        if key in volatile_keys:
-            byte_identical = type_match and present_match  # value may drift
-        else:
-            byte_identical = value_match and type_match and present_match
-
-        if not byte_identical:
-            identical = False
-
-        matrix.append(
-            {
-                "property": key,
-                "direct_value": d_val,
-                "direct_type": d_type,
-                "gateway_value": r_val,
-                "gateway_type": r_type,
-                "byte_identical": bool(byte_identical),
-                "category": "volatile" if key in volatile_keys else "stable",
-                "failure_reason": _failure_reason(value_match, type_match, present_match, key in volatile_keys),
-            }
-        )
-    return identical, matrix
-
-
-def _failure_reason(value_match: bool, type_match: bool, present_match: bool, volatile: bool) -> str:
-    if not present_match:
-        return "FIELD_ADDED_OR_DROPPED"
-    if not type_match:
-        return "TYPE_CAST_DRIFT"
-    if not value_match and not volatile:
-        return "VALUE_MISMATCH"
-    if not value_match and volatile:
-        return "ACCEPTABLE_VOLATILE_DRIFT"
-    return "OK"
-
-
 # ---------------------------------------------------------------------------
 # Self-test — run with:  python -m gateway_app.transparent_proxy
-# Verifies the relay preserves a sample payload byte-for-byte.
+# Verifies the relay preserves a sample payload byte-for-byte using the
+# canonical byte-level comparator from payload_compare.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     sample = {
@@ -231,23 +157,28 @@ if __name__ == "__main__":
         "request_id": "abc-123",
         "risk_score": 0.8543,
     }
-    # Simulate the OLD mutating behaviour to prove detection works:
-    mutated = json.loads(json.dumps(sample))
-    mutated["data"]["risk_score"] = 0.5          # value warp
-    mutated["data"]["new_injected_field"] = True  # field added
+    # Serialize deterministically for byte-level comparison.
+    direct_bytes = json.dumps(sample, separators=(",", ":"), sort_keys=False).encode("utf-8")
 
-    ok, mtx = compare_payloads(sample, mutated, volatile_keys={"generated_at", "request_id"})
+    # Simulate mutation (same shape as the old test, but at byte level).
+    mutated = json.loads(json.dumps(sample))
+    mutated["data"]["risk_score"] = 0.5
+    mutated["data"]["new_injected_field"] = True
+    mutated_bytes = json.dumps(mutated, separators=(",", ":"), sort_keys=False).encode("utf-8")
+
+    result_mutated = compare_payloads(direct_bytes, mutated_bytes)
     print("transparent_relay self-test")
-    print("  identical (mutated sample):", ok, "(expected False)")
-    for row in mtx:
-        if not row["byte_identical"]:
-            print(f"  - DRIFT {row['property']:28} reason={row['failure_reason']} "
-                  f"direct={row['direct_value']!r} relayed={row['gateway_value']!r}")
-    # And a clean copy must be identical:
-    ok2, _ = compare_payloads(sample, json.loads(json.dumps(sample)), volatile_keys={"generated_at", "request_id"})
-    print("  identical (clean copy):   ", ok2, "(expected True)")
-    assert ok is False, "comparator failed to detect mutation"
-    assert ok2 is True, "comparator false-positived on an identical payload"
+    print("  identical (mutated sample):", result_mutated.identical, "(expected False)")
+    if not result_mutated.identical:
+        print(f"  - diff offset: {result_mutated.first_diff_offset}, reason: {result_mutated.reason()}")
+
+    # Clean copy must be identical.
+    clean_bytes = json.dumps(sample, separators=(",", ":"), sort_keys=False).encode("utf-8")
+    result_clean = compare_payloads(direct_bytes, clean_bytes)
+    print("  identical (clean copy):   ", result_clean.identical, "(expected True)")
+
+    assert result_mutated.identical is False, "comparator failed to detect mutation"
+    assert result_clean.identical is True, "comparator false-positived on an identical payload"
     print("  SHA-256 sample:", _sha256(json.dumps(sample, separators=(",", ":"))))
     print("  transparent_relay_enabled:", transparent_relay_enabled())
     print("  OK")

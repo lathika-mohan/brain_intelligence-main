@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.ai_service.middleware import get_request_id
@@ -24,6 +24,13 @@ class ErrorEnvelope(BaseModel):
     message: str = Field(...)
     request_id: str = Field(...)
     details: Optional[Any] = None
+    detail: Optional[Any] = None
+
+    @model_validator(mode="after")
+    def _ensure_detail(self) -> "ErrorEnvelope":
+        if self.detail is None:
+            self.detail = self.message
+        return self
 
 class AIServiceError(RuntimeError):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -54,24 +61,24 @@ def _ui_error(request: Request, status_code: int, code: str, message: str, detai
 async def ai_service_exception_handler(request: Request, exc: AIServiceError):
     if _is_ui(request):
         return _ui_error(request, exc.status_code, exc.error_code, exc.public_message, exc.details)
-    return _response(exc.status_code, ErrorEnvelope(error_code=exc.error_code, message=exc.public_message, request_id=_request_id(request), details=exc.details))
+    return _response(exc.status_code, ErrorEnvelope(error_code=exc.error_code, message=exc.public_message, request_id=_request_id(request), details=exc.details, detail=exc.public_message))
 
 async def ai_http_exception_handler(request: Request, exc: StarletteHTTPException):
     if _is_ui(request):
         return _ui_error(request, exc.status_code, "HTTP_ERROR", str(exc.detail))
-    return _response(exc.status_code, ErrorEnvelope(error_code="HTTP_ERROR", message=str(exc.detail), request_id=_request_id(request)))
+    return _response(exc.status_code, ErrorEnvelope(error_code="HTTP_ERROR", message=str(exc.detail), request_id=_request_id(request), detail=str(exc.detail)))
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     details = exc.errors()
     if _is_ui(request):
         return _ui_error(request, 422, "VALIDATION_ERROR", "Request validation failed. Check payload shape, field types, and allowed values.", details)
-    return _response(422, ErrorEnvelope(error_code="VALIDATION_ERROR", message="Request validation failed. Check payload shape, field types, and allowed values.", request_id=_request_id(request), details=details))
+    return _response(422, ErrorEnvelope(error_code="VALIDATION_ERROR", message="Request validation failed. Check payload shape, field types, and allowed values.", request_id=_request_id(request), details=details, detail="Request validation failed. Check payload shape, field types, and allowed values."))
 
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception path=%s", request.url.path, exc_info=exc)
     if _is_ui(request):
         return _ui_error(request, 500, "INTERNAL_SERVER_ERROR", "An unexpected UI service error occurred.")
-    return _response(500, ErrorEnvelope(error_code="INTERNAL_SERVER_ERROR", message="An unexpected service error occurred.", request_id=_request_id(request)))
+    return _response(500, ErrorEnvelope(error_code="INTERNAL_SERVER_ERROR", message="An unexpected service error occurred.", request_id=_request_id(request), detail="An unexpected service error occurred."))
 
 def install_ai_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AIServiceError, ai_service_exception_handler)

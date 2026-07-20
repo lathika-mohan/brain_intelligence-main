@@ -45,10 +45,10 @@ for candidate in (
     if os.path.isdir(candidate) and candidate not in sys.path:
         sys.path.insert(0, candidate)
 try:
-    from gateway_app.transparent_proxy import compare_payloads  # type: ignore
+    from payload_compare import compare_payloads  # canonical byte-level comparator
 except Exception:  # pragma: no cover - fallback if run standalone w/o the module
-    def compare_payloads(direct, relayed, volatile_keys=None):
-        raise RuntimeError("transparent_proxy.compare_payloads unavailable; "
+    def compare_payloads(expected, actual, *, headers_expected=None, headers_actual=None):
+        raise RuntimeError("payload_compare.compare_payloads unavailable; "
                            "ensure iob-integration/ is on sys.path")
 
 VOLATILE_KEYS = {
@@ -147,7 +147,35 @@ def main() -> int:
             json.dump({"error": str(exc), "byte_identical": False}, f, indent=2)
         return 2
 
-    identical, matrix = compare_payloads(direct, relayed, volatile_keys=VOLATILE_KEYS)
+    # Compare serialized JSON bytes using the canonical byte-level comparator.
+    direct_json = json.dumps(direct, separators=(",", ":"), sort_keys=False)
+    relayed_json = json.dumps(relayed, separators=(",", ":"), sort_keys=False)
+    result = compare_payloads(direct_json.encode("utf-8"), relayed_json.encode("utf-8"))
+    identical = result.identical
+
+    # Build a simplified mutation matrix for reporting (preserves output contract).
+    if identical:
+        matrix = [{
+            "property": "<payload>",
+            "direct_value": direct,
+            "direct_type": type(direct).__name__,
+            "gateway_value": relayed,
+            "gateway_type": type(relayed).__name__,
+            "byte_identical": True,
+            "category": "stable",
+            "failure_reason": "OK",
+        }]
+    else:
+        matrix = [{
+            "property": "<payload>",
+            "direct_value": direct,
+            "direct_type": type(direct).__name__,
+            "gateway_value": relayed,
+            "gateway_type": type(relayed).__name__,
+            "byte_identical": False,
+            "category": "stable",
+            "failure_reason": f"BYTE_DIFF (first offset {result.first_diff_offset}): {result.reason()}",
+        }]
 
     with open(args.out, "w") as f:
         f.write("\n".join(_md_table(matrix, direct, relayed)) + "\n")

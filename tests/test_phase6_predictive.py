@@ -396,7 +396,9 @@ class TestPredictiveApi:
         body["asset_id"] = "asset-999"
         res = client.post("/api/v1/predictive/infer", json=body)
         assert res.status_code == 422
-        assert "does not match" in str(res.json()["detail"])
+        payload = res.json()
+        error_msg = str(payload.get("message") or payload.get("detail"))
+        assert "does not match" in error_msg
 
     def test_health_endpoint_reports_ready(self, client: TestClient):
         res = client.get("/api/v1/predictive/health")

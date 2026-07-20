@@ -153,9 +153,9 @@ async def predictive_infer(request: Request):
             logger.debug(f"Synthetic req failed: {e}")
 
     if inference_req is not None:
+        from app.predictive.feature_engineering import TelemetryContractError
         try:
             from app.predictive.prediction_service import get_prediction_service
-            from app.predictive.feature_engineering import TelemetryContractError
             service = get_prediction_service()
             result = await service.infer(inference_req)
             result_dict = result.model_dump(mode="json")
