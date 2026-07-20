@@ -2,7 +2,7 @@
 
 This module defines the request/response models used by the Phase 10 AI router
 and Phase 11 UI router. These are distinct from the Phase 1 common envelope
-models in :mod:`app.ai_service.common.schemas`.
+models in :mod:`app.ai_service.schemas`.
 
 The models here include:
 - Agent chat request/response models (AgentChatRequest, AgentChatResponse, etc.)
@@ -10,12 +10,44 @@ The models here include:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# ---------------------------------------------------------------------------
+# Phase 1 Common Envelope (migrated from missing common.schemas)
+# ---------------------------------------------------------------------------
+T = TypeVar("T")
+
+
+class UIAPIErrorPayload(BaseModel):
+    """Strict error payload shape used by the Phase 1 response helper."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    code: str = "AI_SERVICE_ERROR"
+    message: str = "An unspecified error occurred."
+    details: Optional[Any] = None
+
+
+class UIAPIResponseEnvelope(BaseModel, Generic[T]):
+    """Standard wire-level response envelope (Section 1.1)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    requestId: str = Field(..., alias="requestId")
+    generatedAt: str = Field(..., alias="generatedAt")
+    success: bool = True
+    error: Optional[UIAPIErrorPayload] = None
+    data: Optional[T] = None
+
+
+def utc_now_iso() -> str:
+    """Return the current UTC time in ISO format."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ---------------------------------------------------------------------------

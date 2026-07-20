@@ -10,7 +10,7 @@ subclass, :class:`UIContractRoute`, installed as the router's
 
 .. code-block:: python
 
-    from app.ai_service.common.middleware import UIContractRoute
+    from app.ai_service.middleware import UIContractRoute
 
     ui_router = APIRouter(
         prefix="/ui",
@@ -30,7 +30,7 @@ wrapped so that, regardless of what the handler itself does:
    that build a raw ``Response``/``StreamingResponse`` and forget to set
    the headers themselves.
 
-This complements (does not replace) :func:`app.ai_service.common.responses.
+This complements (does not replace) :func:`app.ai_service.responses.
 create_ui_response`, which already sets these headers explicitly on the
 ``JSONResponse`` it builds. The route class is the safety net that
 guarantees the contract holds even for hand-rolled responses (e.g. NDJSON
@@ -58,7 +58,7 @@ AI_MODULE_HEADER = "x-ai-module"
 #: Fallback module identifier used when a router/response doesn't specify
 #: its own. Individual sub-routers (e.g. Phase 11's UI router) should pass
 #: an explicit, more specific value (e.g. ``"phase-11-ui"``) to
-#: :func:`app.ai_service.common.responses.create_ui_response` /
+#: :func:`app.ai_service.responses.create_ui_response` /
 #: :func:`make_ui_contract_route`.
 DEFAULT_AI_MODULE = "ai-ui-common"
 

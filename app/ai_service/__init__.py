@@ -26,7 +26,7 @@ runtime dependencies.
 """
 from __future__ import annotations
 
-from app.ai_service.common.middleware import (
+from app.ai_service.middleware import (
     AI_MODULE_HEADER,
     CORRELATION_ID_HEADER,
     DEFAULT_AI_MODULE,
@@ -36,12 +36,12 @@ from app.ai_service.common.middleware import (
     make_ui_contract_route,
     resolve_request_id,
 )
-from app.ai_service.common.responses import (
+from app.ai_service.responses import (
     KNOWN_ARRAY_FIELDS,
     create_ui_response,
     sanitize_arrays,
 )
-from app.ai_service.common.schemas import (
+from app.ai_service.schemas import (
     UIAPIErrorPayload,
     UIAPIResponseEnvelope,
     utc_now_iso,

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from .contracts_manifest import (
+from app.ai_service.contracts_manifest import (
     build_contract_manifest,
     list_mounted_paths,
     validate_manifest_against_openapi,

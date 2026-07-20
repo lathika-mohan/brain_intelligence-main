@@ -4,11 +4,11 @@
 ``/api/v1/ai/ui/*`` should call to build a contract-compliant
 ``JSONResponse``. It guarantees:
 
-1. The exact :class:`~app.ai_service.common.schemas.UIAPIResponseEnvelope`
+1. The exact :class:`~app.ai_service.schemas.UIAPIResponseEnvelope`
    shape (``requestId / generatedAt / success / error / data``) — Section 1.1.
 2. ``x-ai-module`` + ``x-request-id`` response headers on every call —
    Section 1.2 (also enforced independently by
-   :class:`app.ai_service.common.middleware.UIContractRoute` so a handler
+   :class:`app.ai_service.middleware.UIContractRoute` so a handler
    can never accidentally ship a response missing them).
 3. Recursive "no ``null`` arrays" sanitation — Section 1.3. Any dict key
    whose value is ``None`` *and* whose name matches a known/likely array
@@ -19,7 +19,7 @@ Usage
 -----
 .. code-block:: python
 
-    from app.ai_service.common import create_ui_response
+    from app.ai_service import create_ui_response
 
     return create_ui_response(
         data={"nodes": None, "edges": []},   # nodes -> [] automatically
@@ -44,12 +44,12 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Union
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-from app.ai_service.common.middleware import (
+from app.ai_service.middleware import (
     AI_MODULE_HEADER,
     DEFAULT_AI_MODULE,
     REQUEST_ID_HEADER,
 )
-from app.ai_service.common.schemas import UIAPIErrorPayload, UIAPIResponseEnvelope, utc_now_iso
+from app.ai_service.schemas import UIAPIErrorPayload, UIAPIResponseEnvelope, utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +227,7 @@ def create_ui_response(
         (Section 1.3) before serialization.
     request_id:
         The tracking id to echo back — callers should resolve this via
-        :func:`app.ai_service.common.middleware.resolve_request_id` (or the
+        :func:`app.ai_service.middleware.resolve_request_id` (or the
         ``request_id`` already stashed on ``request.state`` by
         :class:`UIContractRoute`) so it matches the inbound
         ``X-Request-ID`` header exactly.
