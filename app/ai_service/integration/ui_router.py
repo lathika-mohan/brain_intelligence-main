@@ -21,6 +21,22 @@ Every response validates through a Phase 11 schema (see
 :mod:`app.ai_service.integration.schemas`) so any drift between the
 backend shape and the front-end expectation surfaces as a 500 in CI
 instead of a silently malformed payload in production.
+
+Phase 1 — Common Infrastructure & Response Contract
+----------------------------------------------------
+This router is wired against the shared Phase 1 envelope/middleware layer
+in :mod:`app.ai_service.common`:
+
+* ``route_class=make_ui_contract_route(module="phase-11-ui")`` guarantees
+  every route on this router echoes ``x-request-id`` and sets
+  ``x-ai-module: phase-11-ui`` on its response — even for hand-rolled
+  ``StreamingResponse``/``JSONResponse`` objects that forget to set the
+  headers themselves.
+* ``_ui_response`` (kept for call-site compatibility with the rest of
+  this module) now delegates to
+  :func:`app.ai_service.common.responses.create_ui_response`, which
+  builds the frozen ``UIAPIResponse`` envelope and sanitises any
+  ``None``-valued array field to ``[]`` before it ever reaches the wire.
 """
 from __future__ import annotations
 
@@ -31,6 +47,13 @@ from typing import Annotated, Any, AsyncIterator, Dict, List, Optional
 from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.ai_service.common import (
+    AI_MODULE_HEADER,
+    REQUEST_ID_HEADER,
+    create_ui_response,
+    get_request_id,
+    make_ui_contract_route,
+)
 from app.ai_service.integration.adapters.chat_event_adapter import (
     to_chat_event_stream,
     to_ui_chat_message,
@@ -42,8 +65,12 @@ from app.ai_service.integration.adapters.frontend_adapters import (
     adapt_inference_to_prediction,
     adapt_recommendations_to_actions,
     build_telemetry_chart_series,
-    to_ui_api_envelope,
 )
+# Note: `to_ui_api_envelope` (legacy Phase 11 envelope builder) is no longer
+# imported here — `_ui_response()` below now delegates to the Phase 1 shared
+# helper `app.ai_service.common.create_ui_response`, which supersedes it for
+# every route on this router. `to_ui_api_envelope` itself is untouched and
+# still exported from `frontend_adapters` for any other existing caller.
 from app.ai_service.integration.cors_headers import (
     build_ui_preflight_headers,
     safe_cors_origin,
@@ -96,6 +123,11 @@ def _get_cors_origins() -> List[str]:
 
 
 
+#: Submodule identifier declared on every response's ``x-ai-module`` header
+#: (Section 1.2). Kept as a module-level constant so both the Phase 1
+#: ``route_class`` safety net and the ``_ui_response`` helper below agree.
+AI_MODULE_NAME = "phase-11-ui"
+
 ui_router = APIRouter(
     prefix="/ui",
     tags=["AI Platform — UI Contracts (Phase 11)"],
@@ -104,6 +136,11 @@ ui_router = APIRouter(
         422: {"description": "Pydantic validation error — see details for the offending field."},
         503: {"description": "AI dependency temporarily unavailable."},
     },
+    # Phase 1 — Common Infrastructure & Response Contract (Section 2.1/3.2):
+    # router-wide interception that guarantees x-request-id echo + x-ai-module
+    # injection on every route mounted here, independent of what each handler
+    # does internally.
+    route_class=make_ui_contract_route(module=AI_MODULE_NAME),
 )
 
 
@@ -146,11 +183,17 @@ class _LazyEngineDep(FastAPIDepends):
 # Helpers
 # ---------------------------------------------------------------------------
 def _request_id(request: Request) -> str:
-    return (
-        request.headers.get("x-request-id")
-        or request.headers.get("x-correlation-id")
-        or str(uuid.uuid4())
-    )
+    """Resolve the tracking id for this request.
+
+    Phase 1: delegates to :func:`app.ai_service.common.get_request_id`,
+    which prefers the id already resolved by ``UIContractRoute`` for this
+    request (``request.state.request_id``) so the exact same id is used
+    end-to-end, and otherwise falls back to reading ``X-Request-ID`` /
+    ``X-Correlation-ID`` / generating a UUID4, unchanged from the original
+    Phase 11 behaviour.
+    """
+
+    return get_request_id(request)
 
 
 def _ui_response(
@@ -164,15 +207,22 @@ def _ui_response(
 
     Always returns a ``UIAPIResponse``-shaped dict, even on errors, so
     the front-end can rely on a single parsing path.
+
+    Phase 1: this now delegates to the shared
+    :func:`app.ai_service.common.responses.create_ui_response` helper so
+    every ``/api/v1/ai/ui/*`` handler gets the exact same envelope shape,
+    header contract, and "no null arrays" sanitation guarantees as any
+    other AI UI submodule that adopts the Phase 1 helper directly. The
+    call signature here is unchanged so no call sites in this file needed
+    to be rewritten beyond this one function body.
     """
 
-    body = to_ui_api_envelope(
-        success=success, data=data, request_id=request_id, error=error
-    )
-    return JSONResponse(
-        status_code=status.HTTP_200_OK if success else status.HTTP_503_SERVICE_UNAVAILABLE,
-        content=body,
-        headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
+    return create_ui_response(
+        data=data,
+        request_id=request_id,
+        success=success,
+        error=error,
+        module=AI_MODULE_NAME,
     )
 
 
