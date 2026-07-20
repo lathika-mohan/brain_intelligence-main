@@ -1,0 +1,34 @@
+........................................................................ [ 60%]
+................................................                         [100%]
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in RulEstimate has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in RulEstimate has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in FailureProbability has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in FailureProbability has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+tests/test_phase11_ui_router_contract.py: 16 warnings
+tests/test_phase11_chat_event_adapter.py: 56 warnings
+  /usr/local/lib/python3.13/site-packages/pydantic/main.py:212: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+120 passed, 76 warnings in 4.31s

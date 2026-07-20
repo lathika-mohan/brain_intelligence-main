@@ -1,0 +1,39 @@
+........................................................................ [ 70%]
+...........................sss                                           [100%]
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in RulEstimate has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in RulEstimate has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in FailureProbability has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in FailureProbability has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+../../../usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132
+  /usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_predictions" in AgentState has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+tests/test_phase6_predictive.py::TestTrainingPipeline::test_run_training_writes_all_artifacts
+  /home/user/project/app/predictive/model_registry.py:92: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "training_timestamp": datetime.utcnow().isoformat() + "Z",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+99 passed, 3 skipped, 6 warnings in 13.10s

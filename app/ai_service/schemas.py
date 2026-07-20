@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -124,6 +124,7 @@ class AIHealthResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    module: Literal["ai-service"] = "ai-service"
     status: str
     version: str
     dependencies: Dict[str, Any]

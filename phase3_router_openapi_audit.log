@@ -1,0 +1,31 @@
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in RulEstimate has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in RulEstimate has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in FailureProbability has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.13/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in FailureProbability has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+sentence-transformers not available: No module named 'sentence_transformers'
+PHASE0 FLAGGED SHIM: Auth router mounted at /auth — OWNERSHIP: Gateway Member 2, to be removed in Phase 0.5
+PHASE0 FLAGGED SHIM: Dashboard router mounted at /dashboard — OWNERSHIP: Gateway Member 2
+PHASE0 FLAGGED SHIM: Assets router mounted at /assets — OWNERSHIP: Gateway Member 2
+PHASE0 FLAGGED SHIM: Alerts router mounted at /alerts — OWNERSHIP: Gateway Member 2
+PHASE0 FLAGGED SHIM: Test inject router mounted at /test — OWNERSHIP: Gateway Member 2
+INFO:app.main:Dev CORS origins (includes frontend for standalone testing): ['http://localhost:3000']
+FastAPI route objects: 49
+OpenAPI paths: 44
+OpenAPI operations: 45
+AI operations: 21
+UI operations: 9
+UI expected/actual: 9/9
+Missing required: []
+STATUS: PASS

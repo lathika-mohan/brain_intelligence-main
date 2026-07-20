@@ -50,9 +50,9 @@ from typing import Any, Mapping, Optional, Tuple
 import httpx
 
 try:
-    from .payload_compare import compare_payloads, assert_byte_identical, PayloadComparison
+    from .payload_compare import compare_payloads as _compare_byte_payloads, assert_byte_identical, PayloadComparison
 except ImportError:
-    from payload_compare import compare_payloads, assert_byte_identical, PayloadComparison
+    from payload_compare import compare_payloads as _compare_byte_payloads, assert_byte_identical, PayloadComparison
 
 logger = logging.getLogger("gateway.transparent_proxy")
 
@@ -136,6 +136,54 @@ async def relay_passthrough(
 
     # IMPORTANT: return `body` directly. No setdefault, no overwrite, no merge.
     return body
+
+
+def compare_payloads(direct, relayed, volatile_keys=None, **kwargs):
+    """Compare mappings semantically or raw bodies byte-for-byte.
+
+    The mapping mode retains the Phase 3 field/type audit API while raw body
+    inputs use the Phase 5 byte comparator. This compatibility boundary keeps
+    both regression contracts wired without transforming relay responses.
+    """
+    if not isinstance(direct, Mapping) or not isinstance(relayed, Mapping):
+        return _compare_byte_payloads(direct, relayed, **kwargs)
+
+    volatile_keys = volatile_keys or set()
+    matrix = []
+    identical = True
+    all_keys = list(direct) + [key for key in relayed if key not in direct]
+    for key in dict.fromkeys(all_keys):
+        in_direct, in_relayed = key in direct, key in relayed
+        d_val = direct.get(key) if in_direct else "<<MISSING>>"
+        r_val = relayed.get(key) if in_relayed else "<<MISSING>>"
+        if in_direct and in_relayed and isinstance(d_val, Mapping) and isinstance(r_val, Mapping):
+            sub_ok, rows = compare_payloads(d_val, r_val, volatile_keys=volatile_keys)
+            for row in rows:
+                row["property"] = f"{key}.{row['property']}"
+            matrix.extend(rows)
+            identical = identical and sub_ok
+            continue
+        type_match = type(d_val) is type(r_val)
+        present_match = in_direct and in_relayed
+        value_match = d_val == r_val
+        volatile = key in volatile_keys
+        row_ok = present_match and type_match and (volatile or value_match)
+        if not present_match:
+            reason = "FIELD_ADDED_OR_DROPPED"
+        elif not type_match:
+            reason = "TYPE_CAST_DRIFT"
+        elif not value_match and not volatile:
+            reason = "VALUE_MISMATCH"
+        else:
+            reason = ""
+        matrix.append({
+            "property": key, "direct_value": d_val, "direct_type": type(d_val).__name__,
+            "gateway_value": r_val, "gateway_type": type(r_val).__name__,
+            "byte_identical": row_ok, "category": "volatile" if volatile else "stable",
+            "failure_reason": reason,
+        })
+        identical = identical and row_ok
+    return identical, matrix
 
 
 # ---------------------------------------------------------------------------
