@@ -396,11 +396,7 @@ class TestPredictiveApi:
         body["asset_id"] = "asset-999"
         res = client.post("/api/v1/predictive/infer", json=body)
         assert res.status_code == 422
-        # The API returns a wrapped error response
-        error_body = res.json()
-        assert error_body["success"] is False
-        # Check error message contains validation info
-        assert "error_code" in error_body or "message" in error_body
+        assert "does not match" in str(res.json()["message"])
 
     def test_health_endpoint_reports_ready(self, client: TestClient):
         res = client.get("/api/v1/predictive/health")

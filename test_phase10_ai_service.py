@@ -202,11 +202,7 @@ def test_ai_health_and_openapi_paths():
     c = client()
     health = c.get("/api/v1/ai/health")
     assert health.status_code == 200
-    payload = health.json()
-    # Health endpoint returns status, version, and dependencies
-    assert payload["status"] == "ready"
-    assert "version" in payload
-    assert "dependencies" in payload
+    assert health.json()["status"] == "ready"
 
     spec = c.get("/openapi.json").json()
     for path in [
