@@ -1,0 +1,56 @@
+sentence-transformers not available: No module named 'sentence_transformers'
+INFO:app.main:Dev CORS origins (includes frontend for standalone testing): ['http://localhost:3000']
+=== Registered Routes ===
+{'HEAD', 'GET'} /openapi.json
+{'HEAD', 'GET'} /docs
+{'HEAD', 'GET'} /docs/oauth2-redirect
+{'HEAD', 'GET'} /redoc
+None 
+{'GET'} /
+{'GET'} /health
+
+Total OpenAPI Routes: 44
+/
+/api/v1/ai/agent/chat
+/api/v1/ai/chat
+/api/v1/ai/decision/{asset_id}/recommendation
+/api/v1/ai/explain/{prediction_id}
+/api/v1/ai/graphrag/query
+/api/v1/ai/health
+/api/v1/ai/knowledge/search
+/api/v1/ai/predict
+/api/v1/ai/predictive/infer
+/api/v1/ai/predictive/{asset_id}/explain
+/api/v1/ai/query
+/api/v1/ai/recommend
+/api/v1/ai/ui/agent/chat
+/api/v1/ai/ui/agent/chat/stream
+/api/v1/ai/ui/contracts
+/api/v1/ai/ui/cors-check
+/api/v1/ai/ui/digital-twin/{asset_id}
+/api/v1/ai/ui/explain/{prediction_id}
+/api/v1/ai/ui/graphrag/query
+/api/v1/ai/ui/options
+/api/v1/ai/ui/recommendations
+/api/v1/alerts/acknowledge/{alert_id}
+/api/v1/alerts/active
+/api/v1/alerts/inject
+/api/v1/alerts/resolve
+/api/v1/assets
+/api/v1/assets/{asset_id}
+/api/v1/auth/login
+/api/v1/dashboard/overview
+/api/v1/decision/health
+/api/v1/decision/recommend
+/api/v1/graphrag/diagnose
+/api/v1/graphrag/health
+/api/v1/graphrag/query
+/api/v1/predictive/evaluation
+/api/v1/predictive/health
+/api/v1/predictive/infer
+/api/v1/predictive/{asset_id}/explain
+/api/v1/test/inject-alarm
+/api/v1/vector/health
+/api/v1/vector/search
+/api/v1/xai/explain
+/health

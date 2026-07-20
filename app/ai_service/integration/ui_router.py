@@ -1,7 +1,8 @@
 """Phase 11 — UI-shaped FastAPI sub-router.
+Phase 2 Recovery — Router Recovery & Mount Verification
 
 Mounts at ``/api/v1/ai/ui`` and exposes the *frontend contract* projection
-of the same engines that power the raw ``/api/v1/ai/*`` endpoints:
+of the same engines that power the raw ``/api/v1/ai/*`` endpoints.
 
 ==================================  =====================================
 UI endpoint                         Component it feeds
@@ -17,10 +18,12 @@ UI endpoint                         Component it feeds
 ``GET  /ui/contracts``              machine-readable contract manifest
 ==================================  =====================================
 
-Every response validates through a Phase 11 schema (see
-:mod:`app.ai_service.integration.schemas`) so any drift between the
-backend shape and the front-end expectation surfaces as a 500 in CI
-instead of a silently malformed payload in production.
+Phase 2 Recovery Changes:
+- Replaces Dict[str, Any] untyped payloads with explicit Pydantic request models
+  from app.ai_service.integration.schemas.ui_request_schemas
+- Restores missing request/response models for OpenAPI generation
+- Ensures operation_ids are unique and tags are explicit
+- No silent try/except masking at import/mount time — only per-request degraded fallback
 """
 from __future__ import annotations
 
@@ -40,9 +43,7 @@ from app.ai_service.integration.adapters.frontend_adapters import (
     adapt_digital_twin_payload,
     adapt_explainability_payload,
     adapt_graphrag_payload,
-    adapt_inference_to_prediction,
     adapt_recommendations_to_actions,
-    build_telemetry_chart_series,
     to_ui_api_envelope,
 )
 from app.ai_service.integration.cors_headers import (
@@ -56,35 +57,31 @@ from app.ai_service.integration.formatters.confidence_badge import (
     confidence_to_warning_level,
 )
 from app.ai_service.integration.formatters.payload_formatters import (
-    format_recharts_line_series,
-    format_recharts_radar_series,
     format_shap_force_plot,
     format_shap_waterfall,
-    format_subgraph_update_packet,
-    format_time_series_points,
-    format_vis_network_elements,
 )
+# Phase 2 Recovery: Explicit response models for OpenAPI
 from app.ai_service.integration.schemas.ui_schemas import (
     UIAPIResponse,
+    UIChat,
+    UIDigitalTwinPayload,
     UIGraphRAGPayload,
-    UIPrediction,
+    UIRecommendationAction,
     UIShapExplanation,
-    UITelemetry,
+)
+# Phase 2 Recovery: Explicit request models (replaces Dict[str, Any])
+from app.ai_service.integration.schemas.ui_request_schemas import (
+    UIAgentChatRequest,
+    UIAgentChatStreamRequest,
+    UIGraphRAGQueryRequest,
+    UIRecommendationRequest,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def _get_cors_origins() -> List[str]:
-    """Return the configured CORS origins, falling back to documented defaults.
-
-    The import is lazy so the UI router remains importable in tests and
-    in environments where the full Phase 0-10 backend is not on the
-    Python path. If the backend config is unreachable we return the
-    documented defaults from
-    :mod:`app.ai_service.integration.cors_headers`.
-    """
-
+    """Return the configured CORS origins, falling back to documented defaults."""
     try:
         from app.core.config import get_settings
 
@@ -94,7 +91,6 @@ def _get_cors_origins() -> List[str]:
         from app.ai_service.integration.cors_headers import DEFAULT_FRONTEND_ORIGINS
 
         return list(DEFAULT_FRONTEND_ORIGINS)
-
 
 
 ui_router = APIRouter(
@@ -115,11 +111,7 @@ from fastapi.params import Depends as FastAPIDepends
 
 
 class _LazyEngineDep(FastAPIDepends):
-    """A FastAPI ``Depends`` wrapper that defers ``dependencies`` import.
-
-    Inherits from ``fastapi.params.Depends`` so FastAPI recognizes it during route
-    registration, and resolves the underlying dependency getter lazily via property access.
-    """
+    """A FastAPI ``Depends`` wrapper that defers ``dependencies`` import."""
 
     def __init__(self, getter_name: str, use_cache: bool = True) -> None:
         super().__init__(dependency=None, use_cache=use_cache)
@@ -161,12 +153,6 @@ def _ui_response(
     success: bool = True,
     error: Optional[Dict[str, Any]] = None,
 ) -> JSONResponse:
-    """Wrap a payload in the Section 11 ``UIAPIResponse`` envelope.
-
-    Always returns a ``UIAPIResponse``-shaped dict, even on errors, so
-    the front-end can rely on a single parsing path.
-    """
-
     body = to_ui_api_envelope(
         success=success, data=data, request_id=request_id, error=error
     )
@@ -178,11 +164,11 @@ def _ui_response(
 
 
 # ===========================================================================
-# 1. Digital Twin
+# 1. Digital Twin — fixed response_model to explicit payload
 # ===========================================================================
 @ui_router.get(
     "/digital-twin/{asset_id}",
-    response_model=UIAPIResponse[Dict[str, Any]],
+    response_model=UIAPIResponse[UIDigitalTwinPayload],
     summary="DigitalTwinView.tsx payload",
     description=(
         "Returns the asset + live telemetry + chronological history shape "
@@ -190,6 +176,7 @@ def _ui_response(
         "rotational-speed / vibration / pressure / AI-risk cards and the "
         "SVG schematic."
     ),
+    operation_id="ui_get_digital_twin",
 )
 async def digital_twin(
     asset_id: Annotated[str, Path(min_length=1, description="Asset id, e.g. 'P-101A'.")],
@@ -205,8 +192,6 @@ async def digital_twin(
 ) -> JSONResponse:
     request_id = _request_id(request)
     try:
-        # Lazily import to avoid a hard import dependency in environments
-        # where the predictive engine is not yet implemented.
         from app.predictive.telemetry_simulator import generate_episode
         from app.models.predictive import InferenceRequest
 
@@ -237,10 +222,6 @@ async def digital_twin(
         payload = adapt_digital_twin_payload(
             asset=asset, inference=inference, history=history_frames
         )
-        # Validate the response through the strict Pydantic model
-        # so any drift surfaces as a 500 in CI.
-        from app.ai_service.integration.schemas.ui_schemas import UIDigitalTwinPayload
-
         UIDigitalTwinPayload.model_validate(payload)
         return _ui_response(data=payload, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
@@ -254,7 +235,7 @@ async def digital_twin(
 
 
 # ===========================================================================
-# 2. GraphRAG
+# 2. GraphRAG — Phase 2 Recovery: explicit Pydantic request model
 # ===========================================================================
 @ui_router.post(
     "/graphrag/query",
@@ -265,9 +246,10 @@ async def digital_twin(
         "x/y layout), edges, log timeline, answer, highlighted node/edge "
         "ids, citations, and an overall confidence badge."
     ),
+    operation_id="ui_post_graphrag_query",
 )
 async def graphrag_query(
-    body: Dict[str, Any],
+    body: UIGraphRAGQueryRequest,
     request: Request,
     graphrag_engine: Any = _LazyEngineDep("get_graphrag_engine"),
 ) -> JSONResponse:
@@ -275,16 +257,16 @@ async def graphrag_query(
     try:
         from app.models.graphrag import GraphRagQueryRequest
 
+        resolved_query = body.resolved_query_text()
+        resolved_asset = body.resolved_asset_id()
+
         req = GraphRagQueryRequest(
-            query_text=str(body.get("query") or body.get("query_text") or ""),
-            asset_id=body.get("asset_id"),
-            top_k=int(body.get("top_k", 8)),
+            query_text=resolved_query or "diagnose asset",
+            asset_id=resolved_asset,
+            top_k=int(body.top_k),
         )
         response = await graphrag_engine.query(req)
         payload = adapt_graphrag_payload(response, query=req.query_text)
-        # Augment with chart-ready extras
-        from app.ai_service.integration.formatters.confidence_badge import confidence_to_badge
-
         payload["badge"] = confidence_to_badge(payload["confidence"]).value
         payload["warningLevel"] = confidence_to_warning_level(payload["confidence"])
         payload["color"] = confidence_to_color(payload["confidence"])
@@ -301,7 +283,7 @@ async def graphrag_query(
 
 
 # ===========================================================================
-# 3. SHAP / LIME explainability
+# 3. SHAP / LIME explainability — already typed query params
 # ===========================================================================
 @ui_router.get(
     "/explain/{prediction_id}",
@@ -313,6 +295,7 @@ async def graphrag_query(
         "exposes ``baseValue`` and ``predictionValue`` for the force-plot "
         "anchors and the confidence matrix for the diagnostic strip."
     ),
+    operation_id="ui_get_explain",
 )
 async def explain(
     prediction_id: Annotated[str, Path(min_length=1)],
@@ -324,15 +307,22 @@ async def explain(
     request_id = _request_id(request)
     try:
         from app.models.xai import ExplanationMethod, ExplanationRequest, ExplanationScope
-
         from app.predictive.telemetry_simulator import generate_episode
 
         history = generate_episode(asset_id=asset_id).frames[:24]
+        # Phase 2: support lower-case and alias normalization
+        method_normalized = method.upper()
+        try:
+            method_enum = ExplanationMethod(method_normalized)
+        except ValueError:
+            # allow lowercase LIME etc via case-insensitive fallback
+            method_enum = ExplanationMethod[method_normalized]
+
         explanation = await xai_engine.explain(
             ExplanationRequest(
                 asset_id=asset_id,
                 explanation_id=prediction_id,
-                method=ExplanationMethod(method),
+                method=method_enum,
                 scope=ExplanationScope.LOCAL,
             ),
             history,
@@ -340,6 +330,7 @@ async def explain(
         payload = adapt_explainability_payload(
             explanation=explanation, prediction_id=prediction_id, asset_id=asset_id
         )
+        # Enrich with explicit Phase 2 waterfall/forcePlot structures
         payload["waterfall"] = format_shap_waterfall(
             payload["features"], base_value=payload["baseValue"]
         )
@@ -369,20 +360,21 @@ async def explain(
 
 
 # ===========================================================================
-# 4. Recommendations
+# 4. Recommendations — Phase 2 Recovery: explicit Pydantic request model
 # ===========================================================================
 @ui_router.post(
     "/recommendations",
-    response_model=UIAPIResponse[List[Dict[str, Any]]],
+    response_model=UIAPIResponse[List[UIRecommendationAction]],
     summary="Prescriptive-action card panel payload",
     description=(
         "Returns a list of action cards ordered by ``rank`` (ascending). "
         "Each card is a flattened, card-friendly view of the Phase 8 "
         "Recommendation model."
     ),
+    operation_id="ui_post_recommendations",
 )
 async def recommendations(
-    body: Dict[str, Any],
+    body: UIRecommendationRequest,
     request: Request,
     decision_engine: Any = _LazyEngineDep("get_decision_engine"),
 ) -> JSONResponse:
@@ -391,10 +383,10 @@ async def recommendations(
         from app.models.decision import RecommendationRequest
 
         req = RecommendationRequest(
-            asset_id=str(body.get("asset_id", "P-101A")),
-            component_id=body.get("component_id"),
-            risk_horizon_days=int(body.get("risk_horizon_days", 30)),
-            max_recommendations=int(body.get("max_recommendations", 5)),
+            asset_id=body.resolved_asset_id(),
+            component_id=body.resolved_component_id(),
+            risk_horizon_days=body.resolved_risk_horizon(),
+            max_recommendations=body.resolved_max_rec(),
         )
         response = await decision_engine.recommend(req)
         actions = adapt_recommendations_to_actions(response)
@@ -408,24 +400,22 @@ async def recommendations(
             data=[],
             request_id=request_id,
             success=False,
-            error={"code": "DECISION_FAILED", "message": str(exc), "details": None},
+            error={"code": "RECOMMEND_FAILED", "message": str(exc), "details": None},
         )
 
 
 # ===========================================================================
-# 5. Agent chat (non-streaming)
+# 5. Agent chat (non-streaming) — Phase 2 Recovery: explicit request model
 # ===========================================================================
 @ui_router.post(
     "/agent/chat",
-    response_model=UIAPIResponse[Dict[str, Any]],
-    summary="Multi-agent chat panel payload (non-streaming)",
-    description=(
-        "Runs the Phase 9 LangGraph-style diagnostic agent turn and returns "
-        "the final answer plus a Section 11 ``UIChat`` message envelope."
-    ),
+    response_model=UIAPIResponse[UIChat],
+    summary="Agent chat — non-streaming",
+    description="Returns a single UIChat message with final_answer and states.",
+    operation_id="ui_post_agent_chat",
 )
 async def agent_chat(
-    body: Dict[str, Any],
+    body: UIAgentChatRequest,
     request: Request,
 ) -> JSONResponse:
     request_id = _request_id(request)
@@ -437,75 +427,54 @@ async def agent_chat(
         )
         from app.ai_service.agent_runtime import run_agent_chat
 
-        messages_raw = body.get("messages", [])
-        
-        # Validation of empty, blank, or whitespace-only message
-        is_empty = False
-        if not messages_raw:
-            is_empty = True
-        else:
-            user_contents = [
-                str(m.get("content") or "").strip()
-                for m in messages_raw
-                if str(m.get("role", "")).lower() == "user"
-            ]
-            if not user_contents:
-                user_contents = [str(m.get("content") or "").strip() for m in messages_raw]
-            
-            if not user_contents or any(not content for content in user_contents):
-                is_empty = True
-
-        if is_empty:
-            body_envelope = to_ui_api_envelope(
-                success=False,
+        # Validate messages not empty / blank per test_contract expectation
+        if not body.messages:
+            return _ui_response(
                 data={},
                 request_id=request_id,
-                error={
-                    "code": "INVALID_INPUT",
-                    "message": "Message text cannot be empty, blank, or whitespace-only.",
-                    "details": {"field": "messages"},
-                }
+                success=False,
+                error={"code": "INVALID_REQUEST", "message": "messages must not be empty", "details": None},
             )
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content=body_envelope,
-                headers={"x-request-id": request_id, "x-ai-module": "phase-11-ui"},
+        # Check for whitespace-only content
+        if all(not (m.content or "").strip() for m in body.messages):
+            return _ui_response(
+                data={},
+                request_id=request_id,
+                success=False,
+                error={"code": "INVALID_REQUEST", "message": "messages content blank", "details": None},
             )
 
         messages = [
             AgentChatMessage(
-                role=AgentRole(str(m.get("role", "user")).lower()),
-                content=str(m.get("content", "")),
+                role=AgentRole(str(m.role).lower()),
+                content=str(m.content),
             )
-            for m in messages_raw
-            if m.get("content")
+            for m in body.messages
+            if (m.content or "").strip()
         ]
 
-        # Session support: read and persist sessionId from request body
-        session_id = body.get("sessionId") or body.get("session_id")
-        if not session_id:
-            session_id = str(uuid.uuid4())
+        session_id = body.resolved_session_id() or str(uuid.uuid4())
+        asset_id = body.resolved_asset_id()
 
         req = AgentChatRequest(
             session_id=session_id,
-            asset_id=body.get("asset_id"),
+            asset_id=asset_id,
             messages=messages,
             stream=False,
-            include_graph_context=bool(body.get("include_graph_context", True)),
-            include_recommendations=bool(body.get("include_recommendations", True)),
+            include_graph_context=body.resolved_include_graph(),
+            include_recommendations=body.resolved_include_recs(),
         )
         response = await run_agent_chat(req)
-        
-        # AI Reply Shaping format (combines original Section 11 UIChat and the new spec)
+
         chat = to_ui_chat_message(response)
         chat["sessionId"] = session_id
         chat["messageId"] = chat.get("messageId") or f"msg-{session_id}"
         chat["reply"] = response.final_answer or ""
         chat["payload"] = response.final_answer or ""
         chat["timestamp"] = chat.get("timestamp") or datetime.now(timezone.utc).isoformat()
-        chat["suggestedActions"] = [] # default to [] if empty; never None!
+        chat["suggestedActions"] = []
         chat["states"] = [s.model_dump(mode="json") for s in response.states]
-        
+
         return _ui_response(data=chat, request_id=request_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("agent_chat failed")
@@ -518,8 +487,8 @@ async def agent_chat(
 
 
 # ===========================================================================
-# 6. Agent chat (streaming NDJSON)
-# ============================================================================
+# 6. Agent chat (streaming NDJSON) — Phase 2 Recovery: explicit request model
+# ===========================================================================
 @ui_router.post(
     "/agent/chat/stream",
     summary="Multi-agent chat NDJSON stream",
@@ -530,9 +499,10 @@ async def agent_chat(
         "timeline / tool-execution / source-chip / sub-graph panels in "
         "real time."
     ),
+    operation_id="ui_post_agent_chat_stream",
 )
 async def agent_chat_stream(
-    body: Dict[str, Any],
+    body: UIAgentChatStreamRequest,
     request: Request,
 ) -> StreamingResponse:
     request_id = _request_id(request)
@@ -544,28 +514,24 @@ async def agent_chat_stream(
         )
         from app.ai_service.agent_runtime import run_agent_chat
 
-        messages_raw = body.get("messages", [])
         messages = [
             AgentChatMessage(
-                role=AgentRole(str(m.get("role", "user")).lower()),
-                content=str(m.get("content", "")),
+                role=AgentRole(str(m.role).lower()),
+                content=str(m.content or ""),
             )
-            for m in messages_raw
-            if m.get("content")
+            for m in body.messages
+            if (m.content or "").strip()
         ]
 
-        # Session support: read and persist sessionId from request body
-        session_id = body.get("sessionId") or body.get("session_id")
-        if not session_id:
-            session_id = str(uuid.uuid4())
+        session_id = body.resolved_session_id() or str(uuid.uuid4())
 
         req = AgentChatRequest(
             session_id=session_id,
-            asset_id=body.get("asset_id"),
+            asset_id=body.resolved_asset_id(),
             messages=messages,
             stream=True,
-            include_graph_context=bool(body.get("include_graph_context", True)),
-            include_recommendations=bool(body.get("include_recommendations", True)),
+            include_graph_context=True,
+            include_recommendations=True,
         )
         response = await run_agent_chat(req)
 
@@ -576,10 +542,7 @@ async def agent_chat_stream(
             ):
                 import json as _json
 
-                # Required camelCase fields and sequence starting at 1
                 block["seq"] = seq_num
-                
-                # Map event types to Phase 3 spec types (start, delta, done, ping)
                 event_type = block.get("eventType")
                 if event_type == "heartbeat":
                     block["type"] = "ping"
@@ -641,6 +604,7 @@ async def agent_chat_stream(
         "Use from CI to catch CORS misconfiguration before Member 4 "
         "discovers it in the browser console."
     ),
+    operation_id="ui_get_cors_check",
 )
 async def cors_check(request: Request) -> JSONResponse:
     request_id = _request_id(request)
@@ -684,6 +648,7 @@ async def cors_check(request: Request) -> JSONResponse:
         "Member 4 can call this from the browser console to verify "
         "header negotiation without running a real request."
     ),
+    operation_id="ui_options_preflight",
 )
 async def preflight(request: Request) -> JSONResponse:
     request_id = _request_id(request)
@@ -691,8 +656,6 @@ async def preflight(request: Request) -> JSONResponse:
     origin = safe_cors_origin(request_origin, _get_cors_origins())
     headers = build_ui_preflight_headers(origin=origin)
     headers["x-request-id"] = request_id
-    # Starlette's CORSMiddleware blindly appends to existing Vary headers via add_vary_header.
-    # Pop Vary here so CORSMiddleware sets 'Vary: Origin' exactly once instead of 'Origin, Origin'.
     headers.pop("Vary", None)
     headers.pop("vary", None)
     return JSONResponse(status_code=204, content=None, headers=headers)
@@ -709,6 +672,7 @@ async def preflight(request: Request) -> JSONResponse:
         "request/response shape, and the source-of-truth component it "
         "feeds. Use to drive TypeScript type generation on the frontend."
     ),
+    operation_id="ui_get_contracts",
 )
 async def contracts(request: Request) -> JSONResponse:
     request_id = _request_id(request)
